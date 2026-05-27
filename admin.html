@@ -443,6 +443,20 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button class="save-settings-btn" onclick="saveClosedDays()">儲存休假日設定</button>
       <div id="closedDaysMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
+      <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">下單時段</div>
+      <div class="settings-card">
+        <div class="settings-field">
+          <div class="settings-label">開放下單時間（超過時段客戶將無法送出訂單）</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <input type="time" id="orderTimeFrom" value="06:00" style="padding:7px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.95rem;color:var(--text);background:#fff;outline:none;">
+            <span style="color:var(--text2);font-size:0.88rem;">～</span>
+            <input type="time" id="orderTimeTo" value="12:30" style="padding:7px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.95rem;color:var(--text);background:#fff;outline:none;">
+          </div>
+        </div>
+      </div>
+      <button class="save-settings-btn" onclick="saveOrderTime()">儲存時段設定</button>
+      <div id="orderTimeMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
+
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">雲端資料庫</div>
       <button class="save-settings-btn" onclick="syncLocalToCloud()" id="syncCloudBtn">☁️ 同步本機資料到雲端</button>
       <div id="syncCloudMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
@@ -1341,7 +1355,7 @@ function goTab(tab){
   if(tab==='orders'){renderFilterBar();renderOrders();}
   if(tab==='products') renderProducts();
   if(tab==='customers') renderCustomers();
-  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); }
+  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); }
 }
 
 let _annSavedSel=null;
@@ -1389,6 +1403,21 @@ function saveAnnouncement(){
 function loadClosedDays(){
   try{const cd=JSON.parse(localStorage.getItem('cp_closed_days')||'[]');
   [0,1,2,3,4,5,6].forEach(d=>{document.getElementById('cd'+d).checked=cd.includes(d);});}catch(e){}
+}
+function loadOrderTime(){
+  const from=localStorage.getItem('cp_order_time_from')||'06:00';
+  const to=localStorage.getItem('cp_order_time_to')||'12:30';
+  document.getElementById('orderTimeFrom').value=from;
+  document.getElementById('orderTimeTo').value=to;
+}
+function saveOrderTime(){
+  const from=document.getElementById('orderTimeFrom').value;
+  const to=document.getElementById('orderTimeTo').value;
+  localStorage.setItem('cp_order_time_from',from);
+  localStorage.setItem('cp_order_time_to',to);
+  const msg=document.getElementById('orderTimeMsg');
+  msg.style.color='var(--teal)';msg.textContent='✓ 時段設定已儲存';msg.style.display='block';
+  setTimeout(()=>{msg.style.display='none';},3000);
 }
 function saveClosedDays(){
   const cd=[0,1,2,3,4,5,6].filter(d=>document.getElementById('cd'+d).checked);

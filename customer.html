@@ -490,12 +490,22 @@ function addToCart(code){
 function getCompanyClosedDays(){
   try{return JSON.parse(localStorage.getItem('cp_closed_days')||'[]');}catch(e){return[];}
 }
+function isOrderTimeOk(){
+  const from=localStorage.getItem('cp_order_time_from')||'06:00';
+  const to=localStorage.getItem('cp_order_time_to')||'12:30';
+  const now=new Date();
+  const cur=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  return cur>=from && cur<=to;
+}
+function getOrderTimeText(){
+  const from=localStorage.getItem('cp_order_time_from')||'06:00';
+  const to=localStorage.getItem('cp_order_time_to')||'12:30';
+  return `下單時間：${from} ～ ${to}`;
+}
 function isOrderDayOk(){
   const today=new Date().getDay();
-  // 公司休假日（優先）
   const closed=getCompanyClosedDays();
   if(closed.includes(today)) return false;
-  // 客戶個別叫貨日
   if(!currentUser||!currentUser.orderDays||!currentUser.orderDays.length) return true;
   return currentUser.orderDays.includes(today);
 }
@@ -523,9 +533,14 @@ function renderCart(){
     return;
   }
   const dayOk=isOrderDayOk();
+  const timeOk=isOrderTimeOk();
   const noticeEl=document.getElementById('orderDayNotice');
   if(!dayOk){
     noticeEl.textContent='📅 今天不是叫貨日，無法送出訂單（'+getOrderDaysText()+'）';
+    noticeEl.style.display='block';
+    document.getElementById('checkoutBtn').disabled=true;
+  } else if(!timeOk){
+    noticeEl.textContent='🕐 目前不在下單時段內，無法送出訂單（'+getOrderTimeText()+'）';
     noticeEl.style.display='block';
     document.getElementById('checkoutBtn').disabled=true;
   } else {
@@ -562,6 +577,7 @@ function renderCheckout(){
 
 function submitOrder(){
   if(!isOrderDayOk()){alert('今天不是叫貨日，無法送出訂單。\n'+getOrderDaysText());return;}
+  if(!isOrderTimeOk()){alert('目前不在下單時段內，無法送出訂單。\n'+getOrderTimeText());return;}
   const items=Object.values(cart);
   const total=items.reduce((s,i)=>s+i.price*i.qty,0);
   const note=document.getElementById('custNote').value.trim();
