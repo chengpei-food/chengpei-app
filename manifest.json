@@ -1,0 +1,39 @@
+{
+  "name": "橙沛食品訂貨系統",
+  "short_name": "橙沛訂貨",
+  "description": "橙沛食品有限公司客戶訂貨平台",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F3DFCC",
+  "theme_color": "#007787",
+  "orientation": "portrait",
+  "lang": "zh-TW",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "客戶訂貨",
+      "short_name": "訂貨",
+      "url": "./customer.html",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "管理後台",
+      "short_name": "後台",
+      "url": "./admin.html",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
