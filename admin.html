@@ -1216,7 +1216,7 @@ function renderCpList(){
   // 未在 CAT_ORDER 的分類也加入
   Object.keys(byCat).forEach(cat=>{ if(!catOrder.includes(cat)) catOrder.push(cat); });
   document.getElementById('cpList').innerHTML = catOrder.map(cat=>{
-    const items = byCat[cat];
+    const items = byCat[cat].sort((a,b)=>a.code.localeCompare(b.code));
     const allChecked = items.every(p=>cpSelected.has(p.code));
     const someChecked = items.some(p=>cpSelected.has(p.code));
     return `<div style="border-bottom:1px solid var(--admin-border);">
