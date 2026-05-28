@@ -222,7 +222,15 @@ input:checked + .slider:before{transform:translateX(20px);}
   <div class="screen" id="screen-orders">
     <div class="orders-toolbar">
       <span style="font-size:0.85rem;font-weight:700;">所有訂單</span>
-      <button class="export-btn" onclick="exportExcel()">📥 匯出 Excel</button>
+      <div style="display:flex;gap:6px;">
+        <button class="export-btn" onclick="exportExcel('today')" style="background:var(--teal);">📥 今天</button>
+        <button class="export-btn" onclick="exportExcel('all')">📥 全部</button>
+      </div>
+    </div>
+    <!-- 批次狀態列 -->
+    <div style="background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:8px 13px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+      <button onclick="batchAdvanceStatus('confirmed','shipping')" style="flex:1;padding:7px 10px;background:#E8F5E9;color:#2E7D32;border:1.5px solid #A5D6A7;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">已確認 → 出貨中</button>
+      <button onclick="batchAdvanceStatus('shipping','done')" style="flex:1;padding:7px 10px;background:#F0F0F0;color:#555;border:1.5px solid #ccc;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">出貨中 → 已完成</button>
     </div>
     <!-- 日期篩選列 -->
     <div style="background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:8px 13px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;">
@@ -698,6 +706,19 @@ function renderOrders(){
   </div>`).join('');
 }
 
+function batchAdvanceStatus(from,to){
+  const label={confirmed:'已確認',shipping:'出貨中',done:'已完成'};
+  const orders=getOrders();
+  const targets=orders.filter(o=>o.status===from);
+  if(!targets.length) return alert(`目前沒有「${label[from]}」的訂單`);
+  if(!confirm(`確定將 ${targets.length} 筆「${label[from]}」訂單改為「${label[to]}」？`)) return;
+  targets.forEach(o=>o.status=to);
+  saveOrders(orders);
+  renderDashboard();
+  renderFilterBar();
+  renderOrders();
+}
+
 function updateStatus(id,status){
   const orders=getOrders();
   const o=orders.find(x=>x.id===id);
@@ -714,12 +735,18 @@ function deleteOrder(id){
 }
 
 /* ── Excel Export（Template 格式） ── */
-function exportExcel(){
+function exportExcel(mode='all'){
   const allOrders=getOrders();
   if(!allOrders.length) return alert('目前沒有訂單資料');
 
+  const todayStr=new Date().toISOString().slice(0,10);
+  const filtered=mode==='today'
+    ? allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr)
+    : allOrders;
+  if(!filtered.length) return alert('今天目前沒有訂單');
+
   // 依下單時間排序
-  const orders=[...allOrders].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+  const orders=[...filtered].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
 
   // 建立客戶查找表（ID + 帳號 + 公司名備援）
   const custMap={}, custByAccount={}, custByCompany={};
@@ -795,6 +822,23 @@ function exportExcel(){
   ];
   XLSX.utils.book_append_sheet(wb,ws,'輸入銷貨單');
   XLSX.writeFile(wb,`橙沛銷貨單_${minDate}_${maxDate}.xlsx`);
+
+  // 匯出後將本次匯出的「待確認」訂單自動改為「已確認」
+  const exportedIds=new Set(orders.map(o=>o.id));
+  const allOrd=getOrders();
+  let changed=false;
+  allOrd.forEach(o=>{
+    if(exportedIds.has(o.id)&&o.status==='pending'){
+      o.status='confirmed';
+      changed=true;
+    }
+  });
+  if(changed){
+    saveOrders(allOrd);
+    renderDashboard();
+    renderFilterBar();
+    renderOrders();
+  }
 }
 
 /* ── Products ── */
