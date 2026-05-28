@@ -512,6 +512,14 @@ async function initDB(){
   ]);
   // 初始化品項
   if(!_CACHE.products || !_CACHE.products.length) dbSave('products', INIT_PRODUCTS);
+  // 補入新品項（版本號機制，確保 INIT_PRODUCTS 有更新時自動補齊）
+  if(localStorage.getItem('cp_prod_ver')!=='2'){
+    const existing = _CACHE.products || [];
+    const existingCodes = new Set(existing.map(p=>p.code));
+    const toAdd = INIT_PRODUCTS.filter(p=>!existingCodes.has(p.code));
+    if(toAdd.length){ dbSave('products', [...existing, ...toAdd]); }
+    localStorage.setItem('cp_prod_ver','2');
+  }
   // 初始化客戶（版本號確保首次強制寫入）
   if(localStorage.getItem('cp_cust_ver')!=='6'){
     dbSave('customers', INIT_CUSTOMERS);
@@ -868,7 +876,7 @@ function renderProducts(){
   let prods=allProds.filter(p=>
     (activeProdCat==='all'||p.category===activeProdCat)&&
     (!q||p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q))
-  );
+  ).sort((a,b)=>a.code.localeCompare(b.code));
   const body=document.getElementById('productsBody');
   if(!prods.length){body.innerHTML='<div class="empty-state">找不到品項</div>';return;}
   // 依分類分組顯示（搜尋時攤平，選了特定分類也攤平）

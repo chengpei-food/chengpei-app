@@ -441,7 +441,7 @@ function renderProducts(){
   const q=document.getElementById('searchInput').value.toLowerCase();
   const allowed=currentUser&&currentUser.allowedProducts?new Set(currentUser.allowedProducts):null;
   const prods=getProducts().filter(p=>p.status!=='NO'&&(!allowed||allowed.has(p.code)));
-  const filtered=prods.filter(p=>(activeCat==='all'||p.category===activeCat)&&(!q||p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q)));
+  const filtered=prods.filter(p=>(activeCat==='all'||p.category===activeCat)&&(!q||p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q))).sort((a,b)=>a.code.localeCompare(b.code));
   const list=document.getElementById('productList');
   if(!filtered.length){list.innerHTML='<div class="no-results">😕 找不到符合的品項</div>';return;}
   list.innerHTML=filtered.map(p=>{
