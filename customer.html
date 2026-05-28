@@ -421,11 +421,13 @@ function hideErr(){ document.getElementById('loginErr').classList.remove('show')
 /* ════════════════════════════
    CATALOG
 ════════════════════════════ */
-const CAT_LABELS={'all':'全部','肉品食材':'🥩 肉品','蔬果農產品':'🥦 蔬果','醬料食材':'🧴 醬料','乾貨五金':'🧂 乾貨','茶飲食用材料':'🍵 茶飲','點心食材':'🍡 點心','米麵製品':'🍜 米麵','麵包堡體':'🍞 堡體','包材用品':'📦 包材','印刷消耗品':'🖨️ 印刷','現場硬體':'🔧 硬體','未分類':'📋 其他'};
+const CAT_LABELS={'all':'全部','肉品食材':'🥩 肉品','麵包堡體':'🍞 堡體','乾貨五金':'🧂 乾貨','醬料食材':'🧴 醬料','茶飲食用材料':'🍵 茶飲','蔬果農產品':'🥦 蔬果','點心食材':'🍡 點心','米麵製品':'🍜 米麵','包材用品':'📦 包材','清潔用品':'🧹 清潔','制服':'👕 制服','現場硬體':'🔧 硬體','印刷消耗品':'🖨️ 印刷','未分類':'📋 其他'};
 let cart={}, activeCat='all';
 
 function initCats(){
-  const cats=['all',...new Set(getProducts().map(p=>p.category))];
+  const _catSet=new Set(getProducts().map(p=>p.category));
+  const _catOrder=['肉品食材','麵包堡體','乾貨五金','醬料食材','茶飲食用材料','蔬果農產品','點心食材','米麵製品','包材用品','清潔用品','制服','現場硬體','印刷消耗品','未分類'];
+  const cats=['all',..._catOrder.filter(c=>_catSet.has(c)),...[..._catSet].filter(c=>!_catOrder.includes(c))];
   document.getElementById('catBar').innerHTML=cats.map(c=>`<span class="cat-chip${c==='all'?' active':''}" onclick="setCat('${c}',this)">${CAT_LABELS[c]||c}</span>`).join('');
 }
 
