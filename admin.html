@@ -297,8 +297,8 @@ input:checked + .slider:before{transform:translateX(20px);}
     <div style="padding:12px 16px 0;display:flex;justify-content:flex-end;">
       <button onclick="toggleCustForm()" id="addCustBtn" style="background:var(--teal);color:white;border:none;border-radius:12px;padding:8px 18px;font-size:0.88rem;font-weight:700;cursor:pointer;">＋ 新增客戶</button>
     </div>
-    <!-- 新增/編輯表單（內嵌） -->
-    <div id="custForm" style="display:none;margin:12px 16px;background:white;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,0.15);">
+    <!-- 新增/編輯表單（Modal） -->
+    <div id="custForm" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:20px;overflow-y:auto;"><div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:480px;box-shadow:0 4px 24px rgba(0,0,0,0.2);margin:auto;">
       <div style="font-size:0.95rem;font-weight:800;color:#007787;margin-bottom:14px;" id="custFormTitle">新增客戶</div>
       <input type="hidden" id="custEditId">
       <div style="margin-bottom:12px;"><label style="display:block;font-size:0.75rem;font-weight:700;color:#007787;margin-bottom:4px;">帳號 *</label><input type="text" id="custAccount" placeholder="登入用帳號" style="width:100%;padding:9px 11px;border:1.5px solid #ccc;border-radius:8px;font-size:0.92rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
@@ -330,7 +330,7 @@ input:checked + .slider:before{transform:translateX(20px);}
         <button type="button" onclick="closeCustForm()" style="flex:1;padding:11px;border:1.5px solid #ccc;border-radius:10px;background:white;font-size:0.9rem;cursor:pointer;color:#333;font-weight:600;">取消</button>
         <button type="button" onclick="saveCust()" style="flex:1;padding:11px;background:#007787;color:white;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;">儲存</button>
       </div>
-    </div>
+    </div></div>
     <div style="padding:0 13px;" id="customersBody"></div>
     </div><!-- end scroll wrapper -->
   </div>
@@ -1091,14 +1091,13 @@ function openCustForm(id){
     [0,1,2,3,4,5,6].forEach(d=>{document.getElementById('od'+d).checked=false;});
   }
   const form=document.getElementById('custForm');
-  form.style.display='block';
+  form.style.display='flex';
   document.getElementById('addCustBtn').style.display='none';
-  setTimeout(()=>form.scrollIntoView({behavior:'smooth',block:'start'}),50);
 }
 
 function closeCustForm(){
   document.getElementById('custForm').style.display='none';
-  document.getElementById('addCustBtn').style.display='';
+  document.getElementById('addCustBtn').style.display='block';
 }
 
 function saveCust(){
