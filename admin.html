@@ -1090,8 +1090,10 @@ function openCustForm(id){
     document.getElementById('custPw').placeholder='至少4碼';
     [0,1,2,3,4,5,6].forEach(d=>{document.getElementById('od'+d).checked=false;});
   }
-  document.getElementById('custForm').style.display='block';
+  const form=document.getElementById('custForm');
+  form.style.display='block';
   document.getElementById('addCustBtn').style.display='none';
+  setTimeout(()=>form.scrollIntoView({behavior:'smooth',block:'start'}),50);
 }
 
 function closeCustForm(){
