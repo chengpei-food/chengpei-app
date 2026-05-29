@@ -453,6 +453,8 @@ input:checked + .slider:before{transform:translateX(20px);}
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <script src="firebase-config.js"></script>
 <!-- SheetJS for Excel export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -606,6 +608,7 @@ function loginSuccess(role){
   roleTag.textContent = limited ? '限制管理員' : '超級管理員';
   roleTag.style.display = 'inline';
   initApp();
+  initFCM('admin', '');
   const lastTab = sessionStorage.getItem('cp_admin_tab') || 'dashboard';
   goTab(lastTab);
 }
@@ -741,7 +744,12 @@ function batchAdvanceStatus(from,to){
 function updateStatus(id,status){
   const orders=getOrders();
   const o=orders.find(x=>x.id===id);
-  if(o){ o.status=status; saveOrders(orders); renderDashboard(); }
+  if(o){
+    o.status=status; saveOrders(orders); renderDashboard();
+    if(['confirmed','shipping','done'].includes(status) && o.customerAccount){
+      callFn('notifyCustomer',{customerAccount:o.customerAccount,status});
+    }
+  }
 }
 
 function deleteOrder(id){
@@ -1454,11 +1462,35 @@ function saveOrderTime(){
 function saveClosedDays(){
   const cd=[0,1,2,3,4,5,6].filter(d=>document.getElementById('cd'+d).checked);
   localStorage.setItem('cp_closed_days',JSON.stringify(cd));
+  if(db) db.collection('appConfig').doc('settings').set({closedDays:cd},{merge:true});
   const msg=document.getElementById('closedDaysMsg');
   const dl=['週日','週一','週二','週三','週四','週五','週六'];
   msg.textContent=cd.length?'✅ 已儲存，休假日：'+cd.map(d=>dl[d]).join('、'):'✅ 已儲存（無休假日，每天皆可叫貨）';
   msg.style.color='var(--teal)';msg.style.display='block';
   setTimeout(()=>{msg.style.display='none';},3000);
+}
+
+/* ── FCM 推播 ── */
+const VAPID_KEY='BIjydipYQxHnbS5DxQcMNGXQ_C2f3q7K2VmwVjPH4QnZLNPKTerGSbvJxgF_cwprxLp4E9tPhdRL3kpF9HdM9CE';
+async function initFCM(role,account){
+  try{
+    if(!('Notification' in window)) return;
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted') return;
+    const msg=firebase.messaging();
+    const token=await msg.getToken({vapidKey:VAPID_KEY});
+    if(!token||!db) return;
+    await db.collection('fcm_tokens').doc(token).set({token,role,account:account||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    // 同步休假日到 Firestore，讓 Cloud Function 可以讀取
+    const cd=JSON.parse(localStorage.getItem('cp_closed_days')||'[]');
+    db.collection('appConfig').doc('settings').set({closedDays:cd},{merge:true});
+  }catch(e){ console.warn('FCM init:',e); }
+}
+function callFn(name,data){
+  try{
+    const fn=firebase.app().functions('asia-east1');
+    fn.httpsCallable(name)(data).catch(e=>console.warn('FCM call failed:',e));
+  }catch(e){ console.warn('FCM call:',e); }
 }
 
 /* ── Init ── */

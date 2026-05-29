@@ -175,6 +175,8 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <script src="firebase-config.js"></script>
 </head>
 <body>
@@ -382,6 +384,7 @@ function loginSuccess(user) {
   document.getElementById('headerUser').textContent = user.company || user.name;
   hideErr();
   initApp();
+  initFCM('customer', user.account||'');
   goTab('catalog');
   // 顯示公告
   const ann=_CACHE.announcement||{};
@@ -593,6 +596,7 @@ function submitOrder(){
     createdAt:new Date().toISOString()
   };
   const orders=getOrders();orders.push(order);saveOrders(orders);
+  callFn('notifyAdmin',{customerName:currentUser.name,customerCompany:currentUser.company||''});
   document.getElementById('orderForm').style.display='none';
   const sc=document.getElementById('successCard');sc.classList.add('show');
   document.getElementById('successNo').textContent='訂單編號：'+no;
@@ -660,6 +664,26 @@ function initApp(){
     try{ cart=JSON.parse(localStorage.getItem('cp_cart_'+currentUser.id)||'{}'); }catch(e){ cart={}; }
   }
   initCats(); renderProducts(); syncAll();
+}
+
+/* ── FCM 推播 ── */
+const VAPID_KEY='BIjydipYQxHnbS5DxQcMNGXQ_C2f3q7K2VmwVjPH4QnZLNPKTerGSbvJxgF_cwprxLp4E9tPhdRL3kpF9HdM9CE';
+async function initFCM(role,account){
+  try{
+    if(!('Notification' in window)) return;
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted') return;
+    const msg=firebase.messaging();
+    const token=await msg.getToken({vapidKey:VAPID_KEY});
+    if(!token||!db) return;
+    await db.collection('fcm_tokens').doc(token).set({token,role,account:account||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  }catch(e){ console.warn('FCM init:',e); }
+}
+function callFn(name,data){
+  try{
+    const fn=firebase.app().functions('asia-east1');
+    fn.httpsCallable(name)(data).catch(e=>console.warn('FCM call failed:',e));
+  }catch(e){ console.warn('FCM call:',e); }
 }
 
 /* ════════════════════════════
