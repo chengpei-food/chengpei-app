@@ -218,6 +218,10 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
             <button type="button" id="loginPwBtn" onclick="togglePw('loginPw','loginPwBtn')" style="flex-shrink:0;background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--text2);padding:4px;">👁</button>
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0 12px;">
+          <input type="checkbox" id="rememberMe" style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer;">
+          <label for="rememberMe" style="font-size:0.82rem;color:var(--text2);cursor:pointer;">記住帳號密碼</label>
+        </div>
         <button class="login-btn" onclick="doLogin()">登入</button>
         <div class="login-err" id="loginErr"></div>
       </div>
@@ -374,6 +378,12 @@ function doLogin() {
   const customers = getCustomers();
   const u = customers.find(c=>c.account===account && c.pw===pw);
   if (!u) return showErr('帳號或密碼錯誤');
+  const remember = document.getElementById('rememberMe').checked;
+  if (remember) {
+    localStorage.setItem('cp_saved_login', JSON.stringify({account, pw}));
+  } else {
+    localStorage.removeItem('cp_saved_login');
+  }
   loginSuccess(u);
 }
 
@@ -697,7 +707,16 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
 (async()=>{
   await initDB();
   const saved=sessionStorage.getItem('cp_user');
-  if(saved){ currentUser=JSON.parse(saved); loginSuccess(currentUser); }
+  if(saved){ currentUser=JSON.parse(saved); loginSuccess(currentUser); return; }
+  const savedLogin=localStorage.getItem('cp_saved_login');
+  if(savedLogin){
+    try{
+      const {account,pw}=JSON.parse(savedLogin);
+      document.getElementById('loginAccount').value=account;
+      document.getElementById('loginPw').value=pw;
+      document.getElementById('rememberMe').checked=true;
+    }catch(e){}
+  }
 })();
 </script>
 </body>
