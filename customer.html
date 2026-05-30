@@ -248,7 +248,9 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
   <div class="screen" id="screen-cart">
     <div class="cart-body" id="cartBody"></div>
     <div class="cart-bar">
-      <span id="cartTotal" style="display:none"></span>
+      <div id="cartTotalRow" style="display:none;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:0.9rem;font-weight:700;color:#007787;">
+        <span>合計金額</span><span id="cartTotal">$0</span>
+      </div>
       <div id="orderDayNotice" style="display:none;background:#FEF3DC;border:1.5px solid #F5A200;border-radius:8px;padding:8px 12px;font-size:0.8rem;color:#c47f00;text-align:center;margin-bottom:10px;">📅 今天不是叫貨日，無法送出訂單</div>
       <button class="go-btn" id="checkoutBtn" onclick="goTab('checkout')" disabled>去結帳 →</button>
     </div>
@@ -470,6 +472,7 @@ function renderProducts(){
         <div class="prod-spec">${p.spec} <span style="color:var(--text3);font-size:0.65rem;">· ${p.code}</span></div>
       </div>
       <div class="prod-foot">
+        ${currentUser&&currentUser.showPrice ? `<div class="prod-price">${fmt(p.price)}<span class="prod-unit">/ ${p.unit}</span></div>` : ''}
         <div class="prod-actions">
           ${soldOut ? '<span style="font-size:0.75rem;color:#c47f00;font-weight:700;">暫時售完</span>' : `
           <div class="qty-row">
@@ -567,6 +570,7 @@ function renderCart(){
     <div class="cart-item-spec">${it.spec}</div>
     <div class="cart-item-foot">
       <div class="qty-row"><button class="q-btn" onclick="cartAdj('${it.code}',-1)">−</button><input class="q-num" type="number" value="${it.qty}" onchange="cartSet('${it.code}',this.value)"><button class="q-btn" onclick="cartAdj('${it.code}',1)">+</button></div>
+      ${currentUser&&currentUser.showPrice ? `<div class="cart-item-sub">${fmt(it.price*it.qty)}</div>` : ''}
     </div>
   </div>`).join('');
 }
@@ -583,8 +587,11 @@ function renderCheckout(){
   const inner=document.getElementById('orderInner');
   if(!items.length){empty.style.display='block';inner.style.display='none';return;}
   empty.style.display='none';inner.style.display='block';
+  const showP=currentUser&&currentUser.showPrice;
+  const total=showP ? items.reduce((s,i)=>s+i.price*i.qty,0) : 0;
   document.getElementById('summaryCard').innerHTML=
-    items.map(i=>`<div class="summary-row"><span>${i.name} × ${i.qty} ${i.unit}</span></div>`).join('');
+    items.map(i=>`<div class="summary-row"><span>${i.name} × ${i.qty} ${i.unit}</span>${showP?`<span>${fmt(i.price*i.qty)}</span>`:''}</div>`).join('')+
+    (showP ? `<div class="summary-total"><span>合計</span><span>${fmt(total)}</span></div>` : '');
 }
 
 function submitOrder(){
@@ -607,7 +614,8 @@ function submitOrder(){
   document.getElementById('orderForm').style.display='none';
   const sc=document.getElementById('successCard');sc.classList.add('show');
   document.getElementById('successNo').textContent='訂單編號：'+no;
-  document.getElementById('successDetail').innerHTML=`訂購人：${currentUser.name}${currentUser.company?'（'+currentUser.company+'）':''}<br>共 ${items.length} 種品項<br>${dt?'希望到貨：'+dt+'<br>':''}我們將盡快與您聯繫確認。`;
+  const _showP=currentUser&&currentUser.showPrice;
+  document.getElementById('successDetail').innerHTML=`訂購人：${currentUser.name}${currentUser.company?'（'+currentUser.company+'）':''}<br>共 ${items.length} 種品項${_showP?'，合計 '+fmt(total):''}<br>${dt?'希望到貨：'+dt+'<br>':''}我們將盡快與您聯繫確認。`;
 }
 
 function resetOrder(){
@@ -637,7 +645,7 @@ function renderMyOrders(){
     </div>
     <div class="order-items-preview">${o.items.slice(0,3).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>3?'…':''}
     </div>
-    <div class="order-total">共 ${o.items.length} 種品項</div>
+    <div class="order-total">${currentUser&&currentUser.showPrice ? '合計 '+fmt(o.total) : '共 '+o.items.length+' 種品項'}</div>
   </div>`).join('');
 }
 
@@ -650,7 +658,9 @@ function syncAll(){
   const items=Object.values(cart);
   const cnt=items.reduce((s,i)=>s+i.qty,0);
   const total=items.reduce((s,i)=>s+i.price*i.qty,0);
+  const showP=currentUser&&currentUser.showPrice;
   document.getElementById('cartTotal').textContent=fmt(total);
+  document.getElementById('cartTotalRow').style.display=showP?'flex':'none';
   const dot=document.getElementById('tabDot');
   dot.textContent=cnt;dot.classList.toggle('show',cnt>0);
   renderCart();renderCheckout();
