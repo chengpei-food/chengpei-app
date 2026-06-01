@@ -225,6 +225,7 @@ input:checked + .slider:before{transform:translateX(20px);}
       <div style="display:flex;gap:6px;">
         <button class="export-btn" onclick="exportExcel('today')" style="background:var(--teal);">📥 今天</button>
         <button class="export-btn" onclick="exportExcel('all')">📥 全部</button>
+        <button class="export-btn" onclick="openExportByStore()" style="background:#9c6700;">🏪 選店家</button>
       </div>
     </div>
     <!-- 批次狀態列 -->
@@ -762,15 +763,16 @@ function deleteOrder(id){
 }
 
 /* ── Excel Export（Template 格式） ── */
-function exportExcel(mode='all'){
+function exportExcel(mode='all', storeId=null){
   const allOrders=getOrders();
   if(!allOrders.length) return alert('目前沒有訂單資料');
 
   const todayStr=new Date().toISOString().slice(0,10);
-  const filtered=mode==='today'
+  let filtered=mode==='today'
     ? allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr)
     : allOrders;
-  if(!filtered.length) return alert('今天目前沒有訂單');
+  if(storeId) filtered=filtered.filter(o=>(o.customerId===storeId||o.customerAccount===storeId));
+  if(!filtered.length) return alert(storeId?'此店家在選定範圍內沒有訂單':'今天目前沒有訂單');
 
   // 依下單時間排序
   const orders=[...filtered].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
@@ -866,6 +868,90 @@ function exportExcel(mode='all'){
     renderFilterBar();
     renderOrders();
   }
+}
+
+/* ── Export by Store ── */
+let _exportStoreSelected = null;
+let _exportStoreAll = [];
+
+function openExportByStore(){
+  const orders = getOrders();
+  if(!orders.length) return alert('目前沒有訂單資料');
+  const customers = getCustomers();
+  const custMap = {};
+  customers.forEach(c=>{ custMap[c.id]=c; if(c.account) custMap[c.account]=c; });
+
+  // 收集有訂單的客戶（去重）
+  const seen = new Set();
+  _exportStoreAll = [];
+  orders.forEach(o=>{
+    const key = o.customerId||o.customerAccount||'';
+    if(seen.has(key)) return;
+    seen.add(key);
+    const cust = custMap[o.customerId]||custMap[o.customerAccount]||{};
+    _exportStoreAll.push({
+      id: o.customerId||o.customerAccount||'',
+      account: cust.account||o.customerAccount||o.customerId||'',
+      name: o.customerCompany||o.customerName||cust.name||''
+    });
+  });
+  _exportStoreAll.sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
+  _exportStoreSelected = null;
+  document.getElementById('storeSearchInput').value='';
+  renderStoreList(_exportStoreAll);
+  document.getElementById('exportStoreModal').style.display='flex';
+}
+
+function renderStoreList(list){
+  const el = document.getElementById('storeList');
+  if(!list.length){ el.innerHTML='<div style="padding:20px;text-align:center;color:#aaa;font-size:0.88rem;">找不到店家</div>'; return; }
+  el.innerHTML = list.map(c=>`
+    <div onclick="selectStore('${c.id}')" id="storeItem-${CSS.escape(c.id)}"
+      style="padding:11px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background 0.1s;">
+      <div>
+        <div style="font-size:0.9rem;font-weight:700;color:#1C2B2D;">${c.name}</div>
+        <div style="font-size:0.72rem;color:#888;margin-top:2px;">${c.account}</div>
+      </div>
+      <div id="storeCheck-${CSS.escape(c.id)}" style="color:#007787;font-size:1.1rem;display:none;">✓</div>
+    </div>`).join('');
+}
+
+function filterStoreList(){
+  const q = document.getElementById('storeSearchInput').value.trim().toLowerCase();
+  const filtered = q ? _exportStoreAll.filter(c=>c.name.toLowerCase().includes(q)||c.account.toLowerCase().includes(q)) : _exportStoreAll;
+  renderStoreList(filtered);
+  if(_exportStoreSelected){
+    const chk = document.getElementById('storeCheck-'+CSS.escape(_exportStoreSelected));
+    if(chk) chk.style.display='block';
+  }
+}
+
+function selectStore(id){
+  // 取消上一個
+  if(_exportStoreSelected){
+    const prev = document.getElementById('storeCheck-'+CSS.escape(_exportStoreSelected));
+    if(prev){ prev.style.display='none'; }
+    const prevRow = document.getElementById('storeItem-'+CSS.escape(_exportStoreSelected));
+    if(prevRow) prevRow.style.background='';
+  }
+  _exportStoreSelected = (_exportStoreSelected===id) ? null : id;
+  if(_exportStoreSelected){
+    const chk = document.getElementById('storeCheck-'+CSS.escape(id));
+    if(chk) chk.style.display='block';
+    const row = document.getElementById('storeItem-'+CSS.escape(id));
+    if(row) row.style.background='#e6f4f5';
+  }
+}
+
+function closeExportByStore(){
+  document.getElementById('exportStoreModal').style.display='none';
+}
+
+function doExportByStore(){
+  if(!_exportStoreSelected) return alert('請先選擇一個店家');
+  const range = document.querySelector('input[name="exportRange"]:checked').value;
+  closeExportByStore();
+  exportExcel(range, _exportStoreSelected);
 }
 
 /* ── Products ── */
@@ -1555,6 +1641,29 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
     <div style="display:flex;gap:10px;">
       <button type="button" onclick="closeCustForm()" style="flex:1;padding:11px;border:1.5px solid #ccc;border-radius:10px;background:white;font-size:0.9rem;cursor:pointer;color:#333;font-weight:600;">取消</button>
       <button type="button" onclick="saveCust()" style="flex:1;padding:11px;background:#007787;color:white;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 選店家匯出 Modal -->
+<div id="exportStoreModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+  <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,0.25);margin:auto;">
+    <div style="font-size:0.95rem;font-weight:800;color:#007787;margin-bottom:14px;">🏪 選擇店家匯出</div>
+    <div style="margin-bottom:12px;">
+      <input type="text" id="storeSearchInput" placeholder="搜尋店家名稱或帳號…" oninput="filterStoreList()" style="width:100%;padding:9px 11px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    </div>
+    <div id="storeList" style="max-height:280px;overflow-y:auto;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:14px;"></div>
+    <div style="margin-bottom:14px;display:flex;gap:8px;">
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;" id="exportRangeToday">
+        <input type="radio" name="exportRange" value="today" style="accent-color:#007787;"> 今天
+      </label>
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;" id="exportRangeAll">
+        <input type="radio" name="exportRange" value="all" checked style="accent-color:#007787;"> 全部
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeExportByStore()" style="flex:1;padding:11px;border:1.5px solid #ccc;border-radius:10px;background:white;font-size:0.9rem;cursor:pointer;color:#333;font-weight:600;">取消</button>
+      <button onclick="doExportByStore()" style="flex:1;padding:11px;background:#9c6700;color:white;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;">📥 匯出</button>
     </div>
   </div>
 </div>
