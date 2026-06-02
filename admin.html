@@ -1286,7 +1286,7 @@ function openCustProducts(id){
   const cust = getCustomers().find(c=>c.id===id);
   if(!cust) return;
   cpCustId = id;
-  const allProds = getProducts();
+  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
   // 若 allowedProducts 為 null/undefined → 預設全選
   cpSelected = new Set(cust.allowedProducts || allProds.map(p=>p.code));
   document.getElementById('cpTitle').textContent = cust.name + ' 的可見品項';
@@ -1305,7 +1305,7 @@ function backToCustomers(){
 
 function renderCpList(){
   const q = document.getElementById('cpSearch').value.toLowerCase();
-  const allProds = getProducts();
+  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
   // 先按搜尋詞過濾
   const searchFiltered = q ? allProds.filter(p=>p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q)) : allProds;
   // 算出現有分類（用搜尋後的結果決定哪些分類要顯示）
@@ -1366,7 +1366,7 @@ function cpToggleOne(code){
 }
 
 function cpToggleCat(cat){
-  const items = getProducts().filter(p=>p.category===cat);
+  const items = getProducts().filter(p=>p.category===cat&&p.status!=='SOLDOUT');
   const allChecked = items.every(p=>cpSelected.has(p.code));
   if(allChecked) items.forEach(p=>cpSelected.delete(p.code));
   else items.forEach(p=>cpSelected.add(p.code));
@@ -1374,7 +1374,7 @@ function cpToggleCat(cat){
 }
 
 function cpSelectAll(val){
-  const allProds = getProducts();
+  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
   if(val) allProds.forEach(p=>cpSelected.add(p.code));
   else cpSelected.clear();
   renderCpList();
@@ -1384,7 +1384,7 @@ function saveCustProducts(){
   const customers = getCustomers();
   const idx = customers.findIndex(c=>c.id===cpCustId);
   if(idx<0) return;
-  const allProds = getProducts();
+  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
   // 若全選則存 null（不限制）
   if(cpSelected.size === allProds.length) customers[idx].allowedProducts = null;
   else customers[idx].allowedProducts = [...cpSelected];
