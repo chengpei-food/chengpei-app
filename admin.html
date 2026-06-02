@@ -1603,7 +1603,6 @@ function applyAllowedProductsMigration(){
 if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 (async()=>{
   await initDB();
-  applyAllowedProductsMigration();
   if(sessionStorage.getItem('cp_admin')==='1') loginSuccess(sessionStorage.getItem('cp_admin_role')||'super');
 })();
 </script>
