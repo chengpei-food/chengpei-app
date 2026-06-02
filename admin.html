@@ -534,11 +534,11 @@ async function initDB(){
     dbSave('products', updated);
     localStorage.setItem('cp_prod_ver','3');
   }
-  // 初始化客戶（版本號確保首次強制寫入）
-  if(localStorage.getItem('cp_cust_ver')!=='6'){
+  // 初始化客戶（只有在資料庫完全沒有客戶時才寫入預設名單，避免覆蓋已設定的資料）
+  if(!_CACHE.customers || !_CACHE.customers.length){
     dbSave('customers', INIT_CUSTOMERS);
-    localStorage.setItem('cp_cust_ver','6');
   }
+  localStorage.setItem('cp_cust_ver','6');
   // 同步密碼
   const cfg = _CACHE.config || {};
   if(cfg.adminPw) localStorage.setItem('cp_admin_pw', cfg.adminPw);
