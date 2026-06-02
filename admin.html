@@ -1286,7 +1286,7 @@ function openCustProducts(id){
   const cust = getCustomers().find(c=>c.id===id);
   if(!cust) return;
   cpCustId = id;
-  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
+  const allProds = getProducts().filter(p=>p.status!=='NO');
   // 若 allowedProducts 為 null/undefined → 預設全選
   cpSelected = new Set(cust.allowedProducts || allProds.map(p=>p.code));
   document.getElementById('cpTitle').textContent = cust.name + ' 的可見品項';
@@ -1305,7 +1305,7 @@ function backToCustomers(){
 
 function renderCpList(){
   const q = document.getElementById('cpSearch').value.toLowerCase();
-  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
+  const allProds = getProducts().filter(p=>p.status!=='NO');
   // 先按搜尋詞過濾
   const searchFiltered = q ? allProds.filter(p=>p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q)) : allProds;
   // 算出現有分類（用搜尋後的結果決定哪些分類要顯示）
@@ -1343,7 +1343,7 @@ function renderCpList(){
       <div style="display:flex;align-items:center;padding:9px 16px 9px 40px;border-top:1px solid var(--admin-border);gap:10px;" onclick="cpToggleOne('${p.code}')">
         <input type="checkbox" id="cp_${p.code}" ${cpSelected.has(p.code)?'checked':''} onclick="event.stopPropagation();cpToggleOne('${p.code}')" style="width:15px;height:15px;accent-color:var(--teal);cursor:pointer;flex-shrink:0;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:0.88rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
+          <div style="font-size:0.88rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}${p.status==='SOLDOUT'?'<span style="font-size:0.65rem;font-weight:800;color:#c47f00;background:#FEF3DC;border:1px solid #F5A200;border-radius:5px;padding:1px 5px;margin-left:5px;">售完</span>':''}</div>
           <div style="font-size:0.72rem;color:var(--text3);">${p.code}${p.spec?` · ${p.spec}`:''}</div>
         </div>
         <div style="font-size:0.78rem;color:var(--text2);white-space:nowrap;">${p.unit} $${p.price}</div>
@@ -1366,7 +1366,7 @@ function cpToggleOne(code){
 }
 
 function cpToggleCat(cat){
-  const items = getProducts().filter(p=>p.category===cat&&p.status!=='SOLDOUT');
+  const items = getProducts().filter(p=>p.category===cat&&p.status!=='NO');
   const allChecked = items.every(p=>cpSelected.has(p.code));
   if(allChecked) items.forEach(p=>cpSelected.delete(p.code));
   else items.forEach(p=>cpSelected.add(p.code));
@@ -1374,7 +1374,7 @@ function cpToggleCat(cat){
 }
 
 function cpSelectAll(val){
-  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
+  const allProds = getProducts().filter(p=>p.status!=='NO');
   if(val) allProds.forEach(p=>cpSelected.add(p.code));
   else cpSelected.clear();
   renderCpList();
@@ -1384,7 +1384,7 @@ function saveCustProducts(){
   const customers = getCustomers();
   const idx = customers.findIndex(c=>c.id===cpCustId);
   if(idx<0) return;
-  const allProds = getProducts().filter(p=>p.status!=='SOLDOUT');
+  const allProds = getProducts().filter(p=>p.status!=='NO');
   // 若全選則存 null（不限制）
   if(cpSelected.size === allProds.length) customers[idx].allowedProducts = null;
   else customers[idx].allowedProducts = [...cpSelected];
