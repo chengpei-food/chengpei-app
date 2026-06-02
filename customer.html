@@ -488,6 +488,10 @@ function renderProducts(){
 }
 
 function fmt(n){return '$'+(Math.round(n*10)/10).toLocaleString();}
+function twNow(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei'}));}
+function twISOString(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+function twDateStr(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+
 function adjQty(code,d){const el=document.getElementById('qty-'+code);if(!el)return;let v=Math.max(0,(parseInt(el.value)||0)+d);el.value=v;if(cart[code]){cart[code].qty=v;syncAll();}}
 function setQtyInput(code,v){v=Math.max(0,parseInt(v)||0);document.getElementById('qty-'+code).value=v;if(cart[code]){cart[code].qty=v;syncAll();}}
 function addToCart(code){
@@ -511,7 +515,7 @@ function getCompanyClosedDays(){
 function isOrderTimeOk(){
   const from=localStorage.getItem('cp_order_time_from')||'06:00';
   const to=localStorage.getItem('cp_order_time_to')||'12:30';
-  const now=new Date();
+  const now=twNow();
   const cur=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
   return cur>=from && cur<=to;
 }
@@ -521,7 +525,7 @@ function getOrderTimeText(){
   return `下單時間：${from} ～ ${to}`;
 }
 function isOrderDayOk(){
-  const today=new Date().getDay();
+  const today=twNow().getDay();
   const closed=getCompanyClosedDays();
   if(closed.includes(today)) return false;
   if(!currentUser||!currentUser.orderDays||!currentUser.orderDays.length) return true;
@@ -530,7 +534,7 @@ function isOrderDayOk(){
 function getOrderDaysText(){
   const dl=['日','一','二','三','四','五','六'];
   const closed=getCompanyClosedDays();
-  const today=new Date().getDay();
+  const today=twNow().getDay();
   if(closed.includes(today)){
     return '公司休假日：週'+closed.map(d=>dl[d]).join('、週');
   }
@@ -600,14 +604,14 @@ function submitOrder(){
   const items=Object.values(cart);
   const total=items.reduce((s,i)=>s+i.price*i.qty,0);
   const note=document.getElementById('custNote').value.trim();
-  const _d=new Date(),_pad=n=>String(n).padStart(2,'0');
+  const _d=twNow(),_pad=n=>String(n).padStart(2,'0');
   const no=`${_d.getFullYear()}${_pad(_d.getMonth()+1)}${_pad(_d.getDate())}-${_pad(_d.getHours())}${_pad(_d.getMinutes())}`;
   const order={
     id:no,customerId:currentUser.id,customerAccount:currentUser.account||'',
     customerName:currentUser.name,
     customerCompany:currentUser.company||'',customerPhone:currentUser.phone,
     items:JSON.parse(JSON.stringify(items)),total,note,status:'pending',
-    createdAt:new Date().toISOString()
+    createdAt:twISOString()
   };
   const orders=getOrders();orders.push(order);saveOrders(orders);
   callFn('notifyAdmin',{customerName:currentUser.name,customerCompany:currentUser.company||''});

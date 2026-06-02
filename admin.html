@@ -630,12 +630,16 @@ function logout(){
 const STATUS_LABEL={pending:'待確認',confirmed:'已確認',shipping:'出貨中',done:'已完成'};
 const STATUS_CLASS={pending:'s-pending',confirmed:'s-confirmed',shipping:'s-shipping',done:'s-done'};
 function fmt(n){ return '$'+(Math.round(n*10)/10).toLocaleString(); }
+function twNow(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei'}));}
+function twISOString(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+function twDateStr(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+
 
 function renderDashboard(){
   const orders=getOrders();
   const customers=getCustomers();
   const pending=orders.filter(o=>o.status==='pending').length;
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=twDateStr();
   const todayOrders=orders.filter(o=>o.createdAt.slice(0,10)===todayStr);
   const totalRevenue=orders.filter(o=>o.status==='done').reduce((s,o)=>s+o.total,0);
   const recent=orders.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,5);
@@ -767,7 +771,7 @@ function exportExcel(mode='all', storeId=null){
   const allOrders=getOrders();
   if(!allOrders.length) return alert('目前沒有訂單資料');
 
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=twDateStr();
   let filtered=mode==='today'
     ? allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr)
     : allOrders;
@@ -1253,7 +1257,7 @@ function saveCust(){
       customers[idx]={...customers[idx],account,name,company,logistics,phone,mobile,orderDays,showPrice};
       if(pw && pw.length>=4) customers[idx].pw=pw;
     } else {
-      customers.push({id:'C'+Date.now(),account,name,company,logistics,phone,mobile,orderDays,showPrice,pw,createdAt:new Date().toISOString()});
+      customers.push({id:'C'+Date.now(),account,name,company,logistics,phone,mobile,orderDays,showPrice,pw,createdAt:twISOString()});
     }
     saveCustomers(customers);
     closeCustForm();
@@ -1522,7 +1526,7 @@ async function loadAnnouncement(){
 function saveAnnouncement(){
   const text=document.getElementById('announcementEditor').innerHTML.trim();
   const active=document.getElementById('announcementActive').checked;
-  const ann={text,active,updatedAt:new Date().toISOString()};
+  const ann={text,active,updatedAt:twISOString()};
   dbSave('announcement',ann);
   const msg=document.getElementById('announcementMsg');
   msg.textContent=active?'✅ 公告已發佈，客戶登入時將看到公告':'✅ 已儲存（公告目前關閉）';
