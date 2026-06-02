@@ -642,15 +642,45 @@ function renderMyOrders(){
   const orders=getOrders().filter(o=>o.customerId===currentUser.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const body=document.getElementById('ordersBody');
   if(!orders.length){body.innerHTML='<div style="text-align:center;color:var(--text3);padding:80px 20px;font-size:0.9rem;">尚無訂單紀錄</div>';return;}
-  body.innerHTML=orders.map(o=>`<div class="order-card">
-    <div class="order-card-head">
-      <div><div class="order-no">${o.id}</div><div class="order-date">${o.createdAt.slice(0,10)}</div></div>
-      <span class="order-status ${STATUS_CLASS[o.status]||'status-pending'}">${STATUS_LABEL[o.status]||o.status}</span>
-    </div>
-    <div class="order-items-preview">${o.items.slice(0,3).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>3?'…':''}
-    </div>
-    <div class="order-total">${currentUser&&currentUser.showPrice ? '合計 '+fmt(o.total) : '共 '+o.items.length+' 種品項'}</div>
-  </div>`).join('');
+  const showP=currentUser&&currentUser.showPrice;
+  body.innerHTML=orders.map(o=>{
+    const itemRows=o.items.map(i=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--divider);">
+        <div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--text);">${i.name}</div>
+          <div style="font-size:0.72rem;color:var(--text2);">${i.spec||''} · ${i.code||''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+          <div style="font-size:0.88rem;font-weight:700;color:var(--teal);">× ${i.qty} ${i.unit||''}</div>
+          ${showP?`<div style="font-size:0.75rem;color:var(--text2);">${fmt(i.price*i.qty)}</div>`:''}
+        </div>
+      </div>`).join('');
+    const noteHtml=o.note?`<div style="margin-top:8px;font-size:0.78rem;color:var(--text2);background:var(--beige);padding:6px 10px;border-radius:6px;">備註：${o.note}</div>`:'';
+    const totalHtml=showP?`<div style="margin-top:8px;text-align:right;font-size:0.88rem;font-weight:800;color:var(--teal);">合計 ${fmt(o.total)}</div>`:'';
+    return `<div class="order-card" onclick="toggleOrderDetail('${o.id}')" style="cursor:pointer;">
+      <div class="order-card-head">
+        <div><div class="order-no">${o.id}</div><div class="order-date">${o.createdAt.slice(0,10)}</div></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="order-status ${STATUS_CLASS[o.status]||'status-pending'}">${STATUS_LABEL[o.status]||o.status}</span>
+          <span id="orderArrow-${o.id}" style="font-size:0.8rem;color:var(--text3);">▼</span>
+        </div>
+      </div>
+      <div style="font-size:0.8rem;color:var(--text2);">${o.items.slice(0,3).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>3?'…':''}</div>
+      <div style="font-size:0.78rem;color:var(--text3);margin-top:3px;">${showP?'合計 '+fmt(o.total):'共 '+o.items.length+' 種品項'}</div>
+      <div id="orderDetail-${o.id}" style="display:none;margin-top:10px;border-top:1px solid var(--divider);padding-top:10px;">
+        ${itemRows}${noteHtml}${totalHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleOrderDetail(id){
+  const detail=document.getElementById('orderDetail-'+id);
+  const arrow=document.getElementById('orderArrow-'+id);
+  if(!detail) return;
+  const open=detail.style.display==='none';
+  detail.style.display=open?'block':'none';
+  if(arrow) arrow.textContent=open?'▲':'▼';
 }
 
 /* ════════════════════════════
