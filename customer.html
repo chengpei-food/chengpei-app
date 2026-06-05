@@ -264,6 +264,9 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
         <div class="success-title">訂單已送出！</div>
         <div class="success-no" id="successNo"></div>
         <div class="success-detail" id="successDetail"></div>
+        <div id="orderSyncWarning" style="display:none;margin:12px 0;padding:12px 14px;background:#FFF3E0;border:1.5px solid #F5A200;border-radius:10px;font-size:0.82rem;color:#c47f00;line-height:1.6;">
+          ⚠️ 網路不穩，訂單可能未傳送成功。<br>請截圖保存，並聯絡橙沛確認是否有收到訂單。
+        </div>
         <button class="success-again" onclick="resetOrder()">繼續訂購</button>
       </div>
       <div id="orderForm">
@@ -599,7 +602,7 @@ function renderCheckout(){
     (showP ? `<div class="summary-total"><span>合計</span><span>${fmt(total)}</span></div>` : '');
 }
 
-function submitOrder(){
+async function submitOrder(){
   if(!isOrderDayOk()){alert('今天不是叫貨日，無法送出訂單。\n'+getOrderDaysText());return;}
   if(!isOrderTimeOk()){alert('目前不在下單時段內，無法送出訂單。\n'+getOrderTimeText());return;}
   const items=Object.values(cart);
@@ -614,13 +617,31 @@ function submitOrder(){
     items:JSON.parse(JSON.stringify(items)),total,note,status:'pending',
     createdAt:twISOString()
   };
-  const orders=getOrders();orders.push(order);saveOrders(orders);
+
+  // 先存到 localStorage（備份）
+  const orders=getOrders();orders.push(order);
+  _CACHE.orders=orders;
+  localStorage.setItem('cp_orders',JSON.stringify(orders));
+
+  // 等待 Firestore 寫入，確認成功
+  let firestoreOk=false;
+  if(db){
+    try{
+      await db.collection('cp_data').doc('orders').set({data:orders});
+      firestoreOk=true;
+    }catch(e){ console.warn('Firestore 寫入失敗:',e); }
+  }
+
   callFn('notifyAdmin',{customerName:currentUser.name,customerCompany:currentUser.company||''});
   document.getElementById('orderForm').style.display='none';
   const sc=document.getElementById('successCard');sc.classList.add('show');
   document.getElementById('successNo').textContent='訂單編號：'+no;
   const _showP=currentUser&&currentUser.showPrice;
   document.getElementById('successDetail').innerHTML=`訂購人：${currentUser.name}${currentUser.company?'（'+currentUser.company+'）':''}<br>共 ${items.length} 種品項${_showP?'，合計 '+fmt(total):''}<br>${dt?'希望到貨：'+dt+'<br>':''}我們將盡快與您聯繫確認。`;
+
+  // 若 Firestore 失敗，顯示警告
+  const warn=document.getElementById('orderSyncWarning');
+  if(warn) warn.style.display=firestoreOk?'none':'block';
 }
 
 function resetOrder(){
