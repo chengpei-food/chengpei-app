@@ -624,10 +624,19 @@ async function submitOrder(){
   localStorage.setItem('cp_orders',JSON.stringify(orders));
 
   // 等待 Firestore 寫入，確認成功
+  // 使用交易（transaction）讀取雲端最新訂單清單後再加入，避免多人同時下單互相覆蓋遺失
   let firestoreOk=false;
   if(db){
     try{
-      await db.collection('cp_data').doc('orders').set({data:orders});
+      const ref=db.collection('cp_data').doc('orders');
+      await db.runTransaction(async(t)=>{
+        const snap=await t.get(ref);
+        const cloudOrders=(snap.exists && snap.data().data) ? snap.data().data : [];
+        if(!cloudOrders.some(o=>o.id===order.id)) cloudOrders.push(order);
+        t.set(ref,{data:cloudOrders});
+        _CACHE.orders=cloudOrders;
+        localStorage.setItem('cp_orders',JSON.stringify(cloudOrders));
+      });
       firestoreOk=true;
     }catch(e){ console.warn('Firestore 寫入失敗:',e); }
   }
