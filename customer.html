@@ -194,6 +194,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
     <span class="header-user" id="headerUser"></span>
     <div style="display:flex;gap:6px;align-items:center;">
     <a href="index.html" style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:16px;padding:5px 11px;font-size:0.75rem;cursor:pointer;text-decoration:none;">首頁</a>
+    <button class="header-logout" onclick="forceUpdateApp()">更新</button>
     <button class="header-logout" onclick="logout()">登出</button>
   </div>
   </div>
@@ -411,6 +412,21 @@ function loginSuccess(user) {
 }
 function closeAnnouncement(){
   document.getElementById('announcementModal').style.display='none';
+}
+
+async function forceUpdateApp(){
+  if(!confirm('確定要更新 App 嗎？\n更新後會重新載入頁面。')) return;
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const reg of regs) await reg.unregister();
+    }
+    if('caches' in window){
+      const keys=await caches.keys();
+      for(const k of keys) await caches.delete(k);
+    }
+  }catch(e){ console.warn('更新失敗:',e); }
+  location.reload(true);
 }
 
 function logout() {
