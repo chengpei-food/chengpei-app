@@ -639,6 +639,11 @@ async function submitOrder(){
   _CACHE.orders=orders;
   localStorage.setItem('cp_orders',JSON.stringify(orders));
 
+  // 立即清空購物車，避免使用者離開成功畫面後購物車殘留品項
+  cart={};
+  if(currentUser) localStorage.removeItem('cp_cart_'+currentUser.id);
+  syncAll();
+
   // 等待 Firestore 寫入，確認成功
   // 使用交易（transaction）讀取雲端最新訂單清單後再加入，避免多人同時下單互相覆蓋遺失
   let firestoreOk=false;
