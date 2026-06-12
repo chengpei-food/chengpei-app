@@ -735,10 +735,19 @@ function renderOrders(){
 
 function batchAdvanceStatus(from,to){
   const label={confirmed:'已確認',shipping:'出貨中',done:'已完成'};
+  const dateFrom=document.getElementById('orderDateFrom')?.value||'';
+  const dateTo=document.getElementById('orderDateTo')?.value||'';
   const orders=getOrders();
-  const targets=orders.filter(o=>o.status===from);
-  if(!targets.length) return alert(`目前沒有「${label[from]}」的訂單`);
-  if(!confirm(`確定將 ${targets.length} 筆「${label[from]}」訂單改為「${label[to]}」？`)) return;
+  const targets=orders.filter(o=>{
+    if(o.status!==from) return false;
+    const dateStr=o.createdAt?o.createdAt.slice(0,10):'';
+    const fromOk=!dateFrom||dateStr>=dateFrom;
+    const toOk=!dateTo||dateStr<=dateTo;
+    return fromOk&&toOk;
+  });
+  const dateNote=(dateFrom||dateTo)?`（日期範圍：${dateFrom||'最早'} ～ ${dateTo||'最新'}）`:'';
+  if(!targets.length) return alert(`目前沒有「${label[from]}」的訂單${dateNote}`);
+  if(!confirm(`確定將 ${targets.length} 筆「${label[from]}」訂單改為「${label[to]}」？${dateNote}`)) return;
   targets.forEach(o=>o.status=to);
   saveOrders(orders);
   renderDashboard();
