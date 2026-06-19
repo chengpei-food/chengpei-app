@@ -37,7 +37,8 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .header-cart{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.15);border-radius:22px;padding:7px 12px 7px 10px;cursor:pointer;}
 .header-cart:active{background:rgba(255,255,255,0.25);}
 .header-badge{background:var(--yellow);color:var(--teal);border-radius:10px;min-width:20px;height:20px;font-size:0.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 5px;}
-.header-stripe{height:3px;background:linear-gradient(90deg,var(--yellow) 0%,var(--yellow2) 40%,var(--teal-light) 100%);flex-shrink:0;}
+.header-stripe{height:26px;background:linear-gradient(90deg,var(--yellow) 0%,var(--yellow2) 40%,var(--teal-light) 100%);flex-shrink:0;display:flex;align-items:center;padding:0 12px;}
+.header-stripe-name{font-size:0.78rem;font-weight:700;color:var(--teal);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── Screens ── */
 .screens{flex:1;overflow:hidden;position:relative;min-height:0;}
@@ -191,14 +192,13 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
     </div>
   </div>
   <div class="header-right">
-    <span class="header-user" id="headerUser"></span>
     <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
     <button class="header-logout" onclick="forceUpdateApp()" style="padding:5px 8px;font-size:0.72rem;">更新</button>
     <button class="header-logout" onclick="logout()" style="padding:5px 8px;font-size:0.72rem;">登出</button>
   </div>
   </div>
 </div>
-<div class="header-stripe" id="headerStripe" style="display:none"></div>
+<div class="header-stripe" id="headerStripe" style="display:none"><span class="header-stripe-name" id="headerUser"></span></div>
 
 <!-- Screens -->
 <div class="screens">
