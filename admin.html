@@ -1067,7 +1067,7 @@ function openProdForm(code){
     document.getElementById('pf-name').value=p.name;
     document.getElementById('pf-unit').value=p.unit||'';
     document.getElementById('pf-spec').value=p.spec||'';
-    document.getElementById('pf-price').value=p.price||'';
+    document.getElementById('pf-price').value=(p.price!=null)?p.price:'';
     document.getElementById('pf-storage').value=p.storage||'常溫';
     document.getElementById('pf-category').value=p.category||'未分類';
   } else {
@@ -1102,7 +1102,7 @@ function saveProd(){
   const storage=document.getElementById('pf-storage').value;
   const category=document.getElementById('pf-category').value;
   const errEl=document.getElementById('prodFormErr');
-  const showErr=msg=>{errEl.textContent=msg;errEl.style.display='block';};
+  const showErr=msg=>{errEl.textContent=msg;errEl.style.display='block';errEl.scrollIntoView({behavior:'smooth',block:'nearest'});};
   errEl.style.display='none';
   if(!inputCode) return showErr('⚠️ 請填寫品項編碼');
   if(!name) return showErr('⚠️ 請填寫品名');
@@ -1114,11 +1114,13 @@ function saveProd(){
     const p=prods.find(x=>x.code===editCode);
     if(!p) return;
     p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category;
-    p.category_display=document.getElementById('pf-category').options[document.getElementById('pf-category').selectedIndex].text;
+    const _selIdx=document.getElementById('pf-category').selectedIndex;
+    p.category_display=_selIdx>=0?document.getElementById('pf-category').options[_selIdx].text:category;
   } else {
     // 新增 — 檢查編碼是否重複
     if(prods.find(x=>x.code===inputCode)) return showErr('⚠️ 此編碼已存在，請換一個');
-    const catDisplay=document.getElementById('pf-category').options[document.getElementById('pf-category').selectedIndex].text;
+    const _si=document.getElementById('pf-category').selectedIndex;
+    const catDisplay=_si>=0?document.getElementById('pf-category').options[_si].text:category;
     prods.push({code:inputCode,name,spec,unit,price,category,storage,category_display:catDisplay,status:'YES'});
   }
   saveProducts(prods);
