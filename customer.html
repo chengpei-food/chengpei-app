@@ -461,8 +461,9 @@ let cart={}, activeCat='all';
 function initCats(){
   const _catSet=new Set(getProducts().map(p=>p.category));
   const _catOrder=['肉品食材','麵包堡體','乾貨五金','醬料食材','茶飲食用材料','蔬果農產品','點心食材','米麵製品','包材用品','清潔用品','制服','現場硬體','印刷消耗品','未分類'];
-  const cats=['all',..._catOrder.filter(c=>_catSet.has(c)),...[..._catSet].filter(c=>!_catOrder.includes(c))];
-  document.getElementById('catBar').innerHTML=cats.map(c=>`<span class="cat-chip${c==='all'?' active':''}" onclick="setCat('${c}',this)">${CAT_LABELS[c]||c}</span>`).join('');
+  const cats=[..._catOrder.filter(c=>_catSet.has(c)),...[..._catSet].filter(c=>!_catOrder.includes(c))];
+  activeCat=cats[0]||'all';
+  document.getElementById('catBar').innerHTML=cats.map((c,i)=>`<span class="cat-chip${i===0?' active':''}" onclick="setCat('${c}',this)">${CAT_LABELS[c]||c}</span>`).join('');
 }
 
 function setCat(cat,el){
