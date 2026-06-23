@@ -560,7 +560,10 @@ async function initDB(){
         updatePendingDot?.();
         const active = document.querySelector('.tab.active')?.id;
         if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
-        if(active==='tab-dashboard') renderDashboard();
+        else if(active==='tab-dashboard') renderDashboard();
+        else if(!active){
+          // 登入尚未完成但資料已到，先存好，loginSuccess 後會自動渲染
+        }
       }
     });
   }
@@ -1496,7 +1499,19 @@ function goTab(tab){
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
   });
   if(tab==='dashboard') renderDashboard();
-  if(tab==='orders'){renderFilterBar();renderOrders();}
+  if(tab==='orders'){
+    renderFilterBar();renderOrders();
+    // 若訂單為空，主動從 Firestore 重新拉取一次確保資料正確
+    if(db && !getOrders().length){
+      db.collection('cp_data').doc('orders').get().then(snap=>{
+        if(snap.exists && snap.data().data && snap.data().data.length){
+          _CACHE.orders=snap.data().data;
+          localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
+          renderFilterBar();renderOrders();
+        }
+      }).catch(()=>{});
+    }
+  }
   if(tab==='products') renderProducts();
   if(tab==='customers') renderCustomers();
   if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); }
