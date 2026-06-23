@@ -353,13 +353,55 @@ function dbSave(key, data){
 }
 
 async function initDB(){
+  // 先備份本機訂單，防止雲端被舊版 App 覆蓋後本機也跟著丟失
+  let localOrdersBackup = [];
+  try {
+    const raw = localStorage.getItem('cp_orders');
+    localOrdersBackup = raw ? JSON.parse(raw) : [];
+  } catch(e) {}
+
   await Promise.all([
     dbLoad('products', null),
     dbLoad('orders', []),
     dbLoad('customers', []),
     dbLoad('announcement', {text:'',active:false})
   ]);
+
+  // 比對：如果本機有訂單但雲端遺失，自動合併顯示並補回雲端
+  if (db && localOrdersBackup.length) {
+    const cloudOrders = _CACHE.orders || [];
+    const toRecover = localOrdersBackup.filter(lo => !cloudOrders.some(co => co.id === lo.id));
+    if (toRecover.length) {
+      // 先合併到 _CACHE，讓「我的訂單」立即顯示正確
+      const merged = [...cloudOrders, ...toRecover];
+      _CACHE.orders = merged;
+      localStorage.setItem('cp_orders', JSON.stringify(merged));
+      // 背景靜默用 transaction 補回雲端
+      recoverMissingOrders(toRecover);
+    }
+  }
+
   if(!_CACHE.products || !_CACHE.products.length) _CACHE.products = INIT_PRODUCTS;
+}
+
+async function recoverMissingOrders(missing) {
+  if (!db || !missing.length) return;
+  try {
+    const ref = db.collection('cp_data').doc('orders');
+    await db.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const cloud = (snap.exists && snap.data().data) ? snap.data().data : [];
+      let added = 0;
+      missing.forEach(o => {
+        if (!cloud.some(c => c.id === o.id)) { cloud.push(o); added++; }
+      });
+      if (added > 0) {
+        t.set(ref, {data: cloud});
+        _CACHE.orders = cloud;
+        localStorage.setItem('cp_orders', JSON.stringify(cloud));
+      }
+    });
+  } catch(e) { console.warn('訂單自動補回失敗:', e); }
 }
 
 function getProducts(){ return _CACHE.products || JSON.parse(localStorage.getItem('cp_products')||'null') || INIT_PRODUCTS; }
