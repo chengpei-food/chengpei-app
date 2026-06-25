@@ -519,7 +519,7 @@ async function initDB(){
   if(localStorage.getItem('cp_prod_ver')!=='3'){
     const existing = _CACHE.products || [];
     // 需要刪除的編碼
-    const toDelete = new Set(['AE0012','TK700P','TKB00','TKCS','TKCS201','TKCS202','TKCS203','TKCS204','TKCS205','TKCS206','TKCS207','TKCS208','TKCS209','TKCS210','TKCS211','TKCS212','TKCS213','TKCS214','TKCS215','TKCS216','TKCS217','TKDM','TKDM1','TKDM40','TKDM40A','TKDM80','TKDM80A','TKDMR','TKSB','TKSB1','TKSB2','Z01','TB017','TK700PA3','TK700PA3E','TK700PA4','TKCB','fee01','fee02','fee03']);
+    const toDelete = new Set(['TK700P','TKB00','TKCS','TKCS201','TKCS202','TKCS203','TKCS204','TKCS205','TKCS206','TKCS207','TKCS208','TKCS209','TKCS210','TKCS211','TKCS212','TKCS213','TKCS214','TKCS215','TKCS216','TKCS217','TKDM','TKDM1','TKDM40','TKDM40A','TKDM80','TKDM80A','TKDMR','TKSB','TKSB1','TKSB2','Z01','TB017','TK700PA3','TK700PA3E','TK700PA4','TKCB','fee01','fee02','fee03']);
     // 需要重分類的編碼
     const catMap = {};
     ['R008A','R009','R0100','R010L','R014','R041A','R043','R048','R052','R052B7','R052CTO','R052MC2','R053','R054T','R055','R056','R057','R057P'].forEach(c=>catMap[c]='清潔用品');

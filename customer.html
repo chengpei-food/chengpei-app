@@ -193,7 +193,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
   </div>
   <div class="header-right">
     <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
-    <button class="header-logout" onclick="forceUpdateApp()" style="padding:5px 8px;font-size:0.72rem;">更新</button>
+    <button id="btnUpdate" class="header-logout" onclick="forceUpdateApp()" style="padding:5px 8px;font-size:0.72rem;display:none;">更新</button>
     <button class="header-logout" onclick="logout()" style="padding:5px 8px;font-size:0.72rem;">登出</button>
   </div>
   </div>
@@ -834,7 +834,25 @@ function callFn(name,data){
 /* ════════════════════════════
    BOOT
 ════════════════════════════ */
-if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').then(reg=>{
+    const showUpdateBtn=()=>{ const b=document.getElementById('btnUpdate'); if(b) b.style.display=''; };
+    // 已有等待中的新版（例如網路離線後重連）
+    if(reg.waiting && navigator.serviceWorker.controller) showUpdateBtn();
+    // 偵測新版本下載完成
+    reg.addEventListener('updatefound',()=>{
+      const nw=reg.installing;
+      nw.addEventListener('statechange',()=>{
+        if(nw.state==='installed' && navigator.serviceWorker.controller) showUpdateBtn();
+      });
+    });
+  }).catch(()=>{});
+  // 每次 App 回到前景時主動檢查更新
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')
+      navigator.serviceWorker.getRegistration().then(reg=>{ if(reg) reg.update(); });
+  });
+}
 (async()=>{
   await initDB();
   const saved=sessionStorage.getItem('cp_user');
