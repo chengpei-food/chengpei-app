@@ -1000,7 +1000,7 @@ function renderProducts(){
   if(!document.getElementById('pcat-all')) initProdCatBar();
   let prods=allProds.filter(p=>
     (activeProdCat==='all'||p.category===activeProdCat)&&
-    (!q||p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q))
+    (!q||p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q)||p.code.toLowerCase().includes(q))
   ).sort((a,b)=>a.code.localeCompare(b.code));
   const body=document.getElementById('productsBody');
   if(!prods.length){body.innerHTML='<div class="empty-state">找不到品項</div>';return;}
