@@ -1127,6 +1127,16 @@ function saveProd(){
     const _si=document.getElementById('pf-category').selectedIndex;
     const catDisplay=_si>=0?document.getElementById('pf-category').options[_si].text:category;
     prods.push({code:inputCode,name,spec,unit,price,category,storage,category_display:catDisplay,status:'YES'});
+    // 新品項自動加入所有有品項權限清單的客戶
+    const custs=getCustomers();
+    let custsChanged=false;
+    custs.forEach(c=>{
+      if(c.allowedProducts && !c.allowedProducts.includes(inputCode)){
+        c.allowedProducts.push(inputCode);
+        custsChanged=true;
+      }
+    });
+    if(custsChanged) saveCustomers(custs);
   }
   saveProducts(prods);
   closeProdForm();

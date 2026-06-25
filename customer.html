@@ -553,8 +553,8 @@ function twNow(){return new Date(new Date().toLocaleString('en-US',{timeZone:'As
 function twISOString(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
 function twDateStr(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
 
-function adjQty(code,d){const el=document.getElementById('qty-'+code);if(!el)return;let v=Math.max(0,(parseInt(el.value)||0)+d);el.value=v;updateAddBtn(code,v);if(cart[code]){cart[code].qty=v;syncAll();}}
-function setQtyInput(code,v){v=Math.max(0,parseInt(v)||0);document.getElementById('qty-'+code).value=v;updateAddBtn(code,v);if(cart[code]){cart[code].qty=v;syncAll();}}
+function adjQty(code,d){const el=document.getElementById('qty-'+code);if(!el)return;let v=Math.max(0,(parseInt(el.value)||0)+d);el.value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
+function setQtyInput(code,v){v=Math.max(0,parseInt(v)||0);document.getElementById('qty-'+code).value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
 function updateAddBtn(code,qty){const btn=document.getElementById('addbtn-'+code);if(!btn||btn.classList.contains('added'))return;const on=qty>0;btn.disabled=!on;btn.style.opacity=on?'1':'0.35';btn.style.cursor=on?'pointer':'not-allowed';}
 function addToCart(code){
   const p=getProducts().find(x=>x.code===code);
@@ -642,7 +642,7 @@ function renderCart(){
 }
 function delCart(code){delete cart[code];syncAll();renderProducts();}
 function cartAdj(code,d){if(cart[code]){cart[code].qty=Math.max(1,cart[code].qty+d);syncAll();}}
-function cartSet(code,v){v=Math.max(1,parseInt(v)||1);if(cart[code]){cart[code].qty=v;syncAll();}}
+function cartSet(code,v){v=parseInt(v)||0;if(cart[code]){if(v<=0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
 
 /* ════════════════════════════
    CHECKOUT
