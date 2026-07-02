@@ -83,6 +83,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .s-confirmed{background:#E6F4F5;color:#007787;}
 .s-shipping{background:#E8F5E9;color:#2E7D32;}
 .s-done{background:#F0F0F0;color:#777777;border:1px solid #DDDDDD;}
+.s-rejected{background:#FDECEA;color:#C62828;border:1px solid #FFCDD2;}
 
 /* ── Orders screen ── */
 .filter-bar{background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:10px 13px;overflow-x:auto;white-space:nowrap;flex-shrink:0;scrollbar-width:none;}
@@ -632,8 +633,8 @@ function logout(){
 }
 
 /* ── Dashboard ── */
-const STATUS_LABEL={pending:'待確認',confirmed:'已確認',shipping:'出貨中',done:'已完成'};
-const STATUS_CLASS={pending:'s-pending',confirmed:'s-confirmed',shipping:'s-shipping',done:'s-done'};
+const STATUS_LABEL={pending:'待確認',confirmed:'已確認',shipping:'出貨中',done:'已完成',rejected:'已拒絕'};
+const STATUS_CLASS={pending:'s-pending',confirmed:'s-confirmed',shipping:'s-shipping',done:'s-done',rejected:'s-rejected'};
 function fmt(n){ return '$'+(Math.round(n*10)/10).toLocaleString(); }
 function twNow(){return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Taipei'}));}
 function twISOString(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
@@ -670,7 +671,7 @@ function renderDashboard(){
 let orderFilter='all', orderCustFilter='all';
 
 function renderFilterBar(){
-  const filters=[['all','全部'],['pending','待確認'],['confirmed','已確認'],['shipping','出貨中'],['done','已完成']];
+  const filters=[['all','全部'],['pending','待確認'],['confirmed','已確認'],['shipping','出貨中'],['done','已完成'],['rejected','已拒絕']];
   document.getElementById('filterBar').innerHTML=filters.map(([v,l])=>`<span class="filter-chip${v===orderFilter?' active':''}" onclick="setFilter('${v}')">${l}</span>`).join('');
   renderCustFilterBar();
 }
@@ -725,12 +726,13 @@ function renderOrders(){
       <span class="oc-total">${fmt(o.total)}</span>
       <div style="display:flex;align-items:center;gap:8px;">
         ${isLimited()
-          ? `<span class="status-badge s-${o.status}">${{pending:'待確認',confirmed:'已確認',shipping:'出貨中',done:'已完成'}[o.status]||o.status}</span>`
+          ? `<span class="status-badge s-${o.status}">${{pending:'待確認',confirmed:'已確認',shipping:'出貨中',done:'已完成',rejected:'已拒絕'}[o.status]||o.status}</span>`
           : `<select class="status-select" onchange="updateStatus('${o.id}',this.value)">
           <option value="pending" ${o.status==='pending'?'selected':''}>待確認</option>
           <option value="confirmed" ${o.status==='confirmed'?'selected':''}>已確認</option>
           <option value="shipping" ${o.status==='shipping'?'selected':''}>出貨中</option>
           <option value="done" ${o.status==='done'?'selected':''}>已完成</option>
+          <option value="rejected" ${o.status==='rejected'?'selected':''}>已拒絕</option>
         </select>`}
         ${isLimited()?'': `<button onclick="deleteOrder('${o.id}')" style="background:none;border:1.5px solid #e53935;color:#e53935;border-radius:8px;padding:6px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;">刪除</button>`}
       </div>
