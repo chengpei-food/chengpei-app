@@ -635,7 +635,7 @@ function renderCart(){
     <div class="cart-item-top"><div class="cart-item-name">${it.name}</div><button class="cart-del" onclick="delCart('${it.code}')">✕</button></div>
     <div class="cart-item-spec">${it.spec}</div>
     <div class="cart-item-foot">
-      <div class="qty-row"><button class="q-btn" onclick="cartAdj('${it.code}',-1)">−</button><input class="q-num" type="number" value="${it.qty}" onchange="cartSet('${it.code}',this.value)"><button class="q-btn" onclick="cartAdj('${it.code}',1)">+</button></div>
+      <div class="qty-row"><button class="q-btn" onclick="cartAdj('${it.code}',-1)">−</button><input class="q-num" type="number" value="${it.qty}" onchange="cartSet('${it.code}',this.value)"><button class="q-btn" onclick="cartAdj('${it.code}',1)">+</button><span class="prod-unit" style="margin-left:3px;">/ ${it.unit||''}</span></div>
       ${currentUser&&currentUser.showPrice ? `<div class="cart-item-sub">${fmt(it.price*it.qty)}</div>` : ''}
     </div>
   </div>`).join('');
@@ -759,7 +759,7 @@ function renderMyOrders(){
           <span id="orderArrow-${o.id}" style="font-size:0.8rem;color:var(--text3);">▼</span>
         </div>
       </div>
-      <div style="font-size:0.8rem;color:var(--text2);">${o.items.slice(0,3).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>3?'…':''}</div>
+      <div style="font-size:0.8rem;color:var(--text2);">${o.items.slice(0,3).map(i=>i.name+'×'+i.qty+(i.unit?' '+i.unit:'')).join('、')}${o.items.length>3?'…':''}</div>
       <div style="font-size:0.78rem;color:var(--text3);margin-top:3px;">${showP?'合計 '+fmt(o.total):'共 '+o.items.length+' 種品項'}</div>
       <div id="orderDetail-${o.id}" style="display:none;margin-top:10px;border-top:1px solid var(--divider);padding-top:10px;">
         ${itemRows}${noteHtml}${totalHtml}
