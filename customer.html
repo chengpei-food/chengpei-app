@@ -540,6 +540,7 @@ function renderProducts(){
             <button class="q-btn" onclick="adjQty('${p.code}',-1)">−</button>
             <input class="q-num" type="number" id="qty-${p.code}" value="0" min="0" onchange="setQtyInput('${p.code}',this.value)">
             <button class="q-btn" onclick="adjQty('${p.code}',1)">+</button>
+            <span class="prod-unit">/ ${p.unit}</span>
           </div>
           <button class="add-btn${inCart?' added':''}" id="addbtn-${p.code}" onclick="addToCart('${p.code}')" ${!inCart?'disabled':''} style="${!inCart?'opacity:0.35;cursor:not-allowed;':''}">${inCart?'✓ 已加入':'加入'}</button>`}
         </div>
