@@ -1586,6 +1586,11 @@ function saveOrderTime(){
   const to=document.getElementById('orderTimeTo').value;
   localStorage.setItem('cp_order_time_from',from);
   localStorage.setItem('cp_order_time_to',to);
+  // 同步到 Firestore config，讓客戶端讀到最新時段
+  if(!_CACHE.config) _CACHE.config={};
+  _CACHE.config.orderTimeFrom=from;
+  _CACHE.config.orderTimeTo=to;
+  dbSave('config',_CACHE.config);
   const msg=document.getElementById('orderTimeMsg');
   msg.style.color='var(--teal)';msg.textContent='✓ 時段設定已儲存';msg.style.display='block';
   setTimeout(()=>{msg.style.display='none';},3000);

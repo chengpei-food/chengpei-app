@@ -364,8 +364,14 @@ async function initDB(){
     dbLoad('products', null),
     dbLoad('orders', []),
     dbLoad('customers', []),
-    dbLoad('announcement', {text:'',active:false})
+    dbLoad('announcement', {text:'',active:false}),
+    dbLoad('config', {})
   ]);
+
+  // 從 Firestore config 同步下單時段到 localStorage
+  const cfg = _CACHE.config || {};
+  if(cfg.orderTimeFrom) localStorage.setItem('cp_order_time_from', cfg.orderTimeFrom);
+  if(cfg.orderTimeTo)   localStorage.setItem('cp_order_time_to',   cfg.orderTimeTo);
 
   // 比對：如果本機有訂單但雲端遺失，自動合併顯示並補回雲端
   if (db && localOrdersBackup.length) {
