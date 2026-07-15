@@ -873,6 +873,31 @@ if('serviceWorker' in navigator){
       document.getElementById('rememberMe').checked=true;
     }catch(e){}
   }
+  // 即時監聽：品項或客戶資料有更新時自動同步
+  if(db){
+    db.collection('cp_data').doc('products').onSnapshot(snap=>{
+      if(!snap.exists||!snap.data().data) return;
+      _CACHE.products=snap.data().data;
+      localStorage.setItem('cp_products',JSON.stringify(_CACHE.products));
+      if(currentUser) renderProducts();
+    });
+    db.collection('cp_data').doc('customers').onSnapshot(snap=>{
+      if(!snap.exists||!snap.data().data) return;
+      _CACHE.customers=snap.data().data;
+      localStorage.setItem('cp_customers',JSON.stringify(_CACHE.customers));
+      // 更新目前登入的客戶資料（allowedProducts 等欄位）
+      if(currentUser){
+        const fresh=_CACHE.customers.find(c=>c.id===currentUser.id);
+        if(fresh){ currentUser=fresh; sessionStorage.setItem('cp_user',JSON.stringify(fresh)); renderProducts(); }
+      }
+    });
+    db.collection('cp_data').doc('config').onSnapshot(snap=>{
+      if(!snap.exists) return;
+      const cfg=snap.data().data||{};
+      if(cfg.orderTimeFrom) localStorage.setItem('cp_order_time_from',cfg.orderTimeFrom);
+      if(cfg.orderTimeTo)   localStorage.setItem('cp_order_time_to',cfg.orderTimeTo);
+    });
+  }
 })();
 </script>
 </body>
