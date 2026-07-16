@@ -806,27 +806,21 @@ async function forceRecoverOrders(){
     const local=getOrders().filter(o=>o.customerId===currentUser.id);
     if(!local.length){if(msgEl){msgEl.textContent='沒有本機訂單需要補回';setTimeout(()=>{msgEl.style.display='none';},3000);}return;}
     const ref=db.collection('cp_data').doc('orders');
+    // 直接讀取後寫入（避免 transaction 失敗）
+    const snap=await ref.get();
+    const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
     let added=0;
-    await db.runTransaction(async(t)=>{
-      const snap=await t.get(ref);
-      const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
-      local.forEach(lo=>{
-        const matchIdx=cloud.findIndex(co=>co.id===lo.id);
-        if(matchIdx===-1){
-          cloud.push(lo);added++;
-        } else if(cloud[matchIdx].customerId!==lo.customerId){
-          // ID 衝突：同一分鐘不同門市下單，加上客戶ID後綴區分
-          const newId=lo.id+'-'+currentUser.id;
-          cloud.push({...lo,id:newId});
-          added++;
-          // 同步更新 localStorage 裡的 ID
-          const localAll=JSON.parse(localStorage.getItem('cp_orders')||'[]');
-          const idx=localAll.findIndex(o=>o.id===lo.id&&o.customerId===currentUser.id);
-          if(idx>=0){localAll[idx].id=newId;localStorage.setItem('cp_orders',JSON.stringify(localAll));_CACHE.orders=localAll;}
-        }
-      });
-      if(added>0) t.set(ref,{data:cloud});
+    local.forEach(lo=>{
+      const matchIdx=cloud.findIndex(co=>co.id===lo.id);
+      if(matchIdx===-1){
+        cloud.push(lo);added++;
+      } else if(cloud[matchIdx].customerId!==lo.customerId){
+        const newId=lo.id+'-'+currentUser.id;
+        cloud.push({...lo,id:newId});
+        added++;
+      }
     });
+    if(added>0) await ref.set({data:cloud});
     if(added>0){
       if(msgEl){msgEl.style.color='#2E7D32';msgEl.textContent=`✓ 已成功補回 ${added} 張訂單！`;}
       if(bar) bar.style.display='none';
@@ -837,9 +831,9 @@ async function forceRecoverOrders(){
       setTimeout(()=>{if(msgEl)msgEl.style.display='none';},3000);
     }
   }catch(e){
-    if(msgEl){msgEl.style.color='#C62828';msgEl.textContent='補回失敗，請確認網路後再試。';}
+    const errCode=e.code||e.message||'未知';
+    if(msgEl){msgEl.style.color='#C62828';msgEl.textContent=`補回失敗（${errCode}）`;msgEl.style.display='block';}
     console.error('forceRecover error:',e);
-    setTimeout(()=>{if(msgEl)msgEl.style.display='none';},4000);
   }
 }
 
