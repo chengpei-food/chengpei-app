@@ -285,6 +285,11 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 
   <!-- MY ORDERS -->
   <div class="screen" id="screen-orders">
+    <div id="recoverBar" style="display:none;padding:10px 14px;background:#FFF8E1;border-bottom:1px solid #FFE082;align-items:center;gap:10px;">
+      <span style="font-size:0.82rem;color:#5D4037;flex:1;">⚠️ 有訂單可能未同步到雲端</span>
+      <button onclick="forceRecoverOrders()" style="background:var(--teal);color:white;border:none;border-radius:10px;padding:7px 14px;font-size:0.8rem;font-weight:700;cursor:pointer;">立即補回</button>
+    </div>
+    <div id="recoverMsg" style="display:none;padding:10px 14px;font-size:0.82rem;text-align:center;"></div>
     <div class="orders-body" id="ordersBody"></div>
   </div>
 
@@ -674,7 +679,8 @@ async function submitOrder(){
   const total=items.reduce((s,i)=>s+i.price*i.qty,0);
   const note=document.getElementById('custNote').value.trim();
   const _d=twNow(),_pad=n=>String(n).padStart(2,'0');
-  const no=`${_d.getFullYear()}${_pad(_d.getMonth()+1)}${_pad(_d.getDate())}-${_pad(_d.getHours())}${_pad(_d.getMinutes())}`;
+  const _custSuffix=(currentUser.account||currentUser.id||'').toString().replace(/[^a-zA-Z0-9一-鿿]/g,'').slice(0,6)||'cust';
+  const no=`${_d.getFullYear()}${_pad(_d.getMonth()+1)}${_pad(_d.getDate())}-${_pad(_d.getHours())}${_pad(_d.getMinutes())}-${_custSuffix}`;
   const order={
     id:no,customerId:currentUser.id,customerAccount:currentUser.account||'',
     customerName:currentUser.name,
@@ -775,6 +781,68 @@ function renderMyOrders(){
   }).join('');
 }
 
+async function checkUnsyncedOrders(){
+  if(!db||!currentUser) return;
+  try{
+    const local=getOrders().filter(o=>o.customerId===currentUser.id);
+    if(!local.length) return;
+    const snap=await db.collection('cp_data').doc('orders').get();
+    const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
+    const unsynced=local.filter(lo=>{
+      const match=cloud.find(co=>co.id===lo.id);
+      return !match||(match.customerId!==lo.customerId);
+    });
+    const bar=document.getElementById('recoverBar');
+    if(bar) bar.style.display=unsynced.length?'flex':'none';
+  }catch(e){}
+}
+
+async function forceRecoverOrders(){
+  if(!db||!currentUser){alert('目前無法連線，請稍後再試');return;}
+  const msgEl=document.getElementById('recoverMsg');
+  const bar=document.getElementById('recoverBar');
+  if(msgEl){msgEl.style.display='block';msgEl.style.color='var(--teal)';msgEl.textContent='補回中…';}
+  try{
+    const local=getOrders().filter(o=>o.customerId===currentUser.id);
+    if(!local.length){if(msgEl){msgEl.textContent='沒有本機訂單需要補回';setTimeout(()=>{msgEl.style.display='none';},3000);}return;}
+    const ref=db.collection('cp_data').doc('orders');
+    let added=0;
+    await db.runTransaction(async(t)=>{
+      const snap=await t.get(ref);
+      const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
+      local.forEach(lo=>{
+        const matchIdx=cloud.findIndex(co=>co.id===lo.id);
+        if(matchIdx===-1){
+          cloud.push(lo);added++;
+        } else if(cloud[matchIdx].customerId!==lo.customerId){
+          // ID 衝突：同一分鐘不同門市下單，加上客戶ID後綴區分
+          const newId=lo.id+'-'+currentUser.id;
+          cloud.push({...lo,id:newId});
+          added++;
+          // 同步更新 localStorage 裡的 ID
+          const localAll=JSON.parse(localStorage.getItem('cp_orders')||'[]');
+          const idx=localAll.findIndex(o=>o.id===lo.id&&o.customerId===currentUser.id);
+          if(idx>=0){localAll[idx].id=newId;localStorage.setItem('cp_orders',JSON.stringify(localAll));_CACHE.orders=localAll;}
+        }
+      });
+      if(added>0) t.set(ref,{data:cloud});
+    });
+    if(added>0){
+      if(msgEl){msgEl.style.color='#2E7D32';msgEl.textContent=`✓ 已成功補回 ${added} 張訂單！`;}
+      if(bar) bar.style.display='none';
+      setTimeout(()=>{if(msgEl)msgEl.style.display='none';},4000);
+    } else {
+      if(msgEl){msgEl.style.color='var(--text2)';msgEl.textContent='訂單已是最新狀態，無需補回。';}
+      if(bar) bar.style.display='none';
+      setTimeout(()=>{if(msgEl)msgEl.style.display='none';},3000);
+    }
+  }catch(e){
+    if(msgEl){msgEl.style.color='#C62828';msgEl.textContent='補回失敗，請確認網路後再試。';}
+    console.error('forceRecover error:',e);
+    setTimeout(()=>{if(msgEl)msgEl.style.display='none';},4000);
+  }
+}
+
 function toggleOrderDetail(id){
   const detail=document.getElementById('orderDetail-'+id);
   const arrow=document.getElementById('orderArrow-'+id);
@@ -807,7 +875,7 @@ function goTab(tab){
     const tabEl=document.getElementById('tab-'+t);
     if(tabEl) tabEl.classList.toggle('active',t===tab);
   });
-  if(tab==='orders') renderMyOrders();
+  if(tab==='orders'){ renderMyOrders(); checkUnsyncedOrders(); }
 }
 
 function initApp(){
