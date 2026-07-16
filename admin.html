@@ -554,22 +554,35 @@ async function initDB(){
     localStorage.setItem('cp_admin_pw', DEFAULT_PW);
     localStorage.setItem('cp_pw_ver','2');
   }
-  // 即時訂單監聽（管理員在線時自動更新）
+  // 即時訂單監聽：監聽 cp_orders collection（每間店獨立文件）
   if(db){
-    db.collection('cp_data').doc('orders').onSnapshot(snap=>{
-      if(!snap.exists) return;
-      const fresh = snap.data().data;
-      if(!fresh) return;
-      _CACHE.orders = fresh;
-      localStorage.setItem('cp_orders', JSON.stringify(fresh));
+    // 自動遷移：若舊 cp_data/orders 有資料且 cp_orders 還沒建立，自動拆分遷移
+    db.collection('cp_orders').get().then(async colSnap=>{
+      if(!colSnap.empty) return; // 已有新格式，不需遷移
+      const legSnap=await db.collection('cp_data').doc('orders').get();
+      if(!legSnap.exists||!legSnap.data().data||!legSnap.data().data.length) return;
+      const byStore={};
+      legSnap.data().data.forEach(o=>{
+        const sid=String(o.customerId||'unknown');
+        if(!byStore[sid]) byStore[sid]=[];
+        byStore[sid].push(o);
+      });
+      await Promise.all(Object.entries(byStore).map(([sid,orders])=>
+        db.collection('cp_orders').doc(sid).set({data:orders})
+      ));
+      console.log('訂單遷移完成，共',Object.keys(byStore).length,'間門市');
+    }).catch(e=>console.warn('遷移失敗:',e));
+
+    db.collection('cp_orders').onSnapshot(snapshot=>{
+      let allOrders=[];
+      snapshot.forEach(doc=>{ if(doc.data().data) allOrders=allOrders.concat(doc.data().data); });
+      _CACHE.orders=allOrders;
+      localStorage.setItem('cp_orders',JSON.stringify(allOrders));
       if(sessionStorage.getItem('cp_admin')==='1'){
         updatePendingDot?.();
-        const active = document.querySelector('.tab.active')?.id;
+        const active=document.querySelector('.tab.active')?.id;
         if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
         else if(active==='tab-dashboard') renderDashboard();
-        else if(!active){
-          // 登入尚未完成但資料已到，先存好，loginSuccess 後會自動渲染
-        }
       }
     });
   }
@@ -580,7 +593,16 @@ function getLimitedPw(){ return (_CACHE.config||{}).limitedAdminPw || localStora
 function getAdminRole(){ return sessionStorage.getItem('cp_admin_role')||'super'; }
 function isLimited(){ return getAdminRole()==='limited'; }
 function getOrders(){ return _CACHE.orders || JSON.parse(localStorage.getItem('cp_orders')||'[]'); }
-function saveOrders(d){ dbSave('orders', d); }
+function saveOrders(d){
+  _CACHE.orders=d;
+  localStorage.setItem('cp_orders',JSON.stringify(d));
+  if(!db) return;
+  const byStore={};
+  d.forEach(o=>{ const sid=String(o.customerId||'unknown'); if(!byStore[sid])byStore[sid]=[]; byStore[sid].push(o); });
+  Object.entries(byStore).forEach(([sid,orders])=>{
+    db.collection('cp_orders').doc(sid).set({data:orders}).catch(e=>console.warn('saveOrders:',sid,e));
+  });
+}
 function getCustomers(){ return _CACHE.customers || JSON.parse(localStorage.getItem('cp_customers')||'[]'); }
 function saveCustomers(d){ dbSave('customers', d); }
 function getProducts(){ return _CACHE.products || JSON.parse(localStorage.getItem('cp_products')||'null') || INIT_PRODUCTS; }
@@ -1471,7 +1493,9 @@ async function archiveOldOrders(){
       msg.style.display='block';msg.style.color='var(--teal)';msg.textContent='沒有30天前的訂單可清理。';
       btn.disabled=false;btn.textContent='🗂️ 清理舊訂單（保留近30天）';return;
     }
-    await db.collection('cp_data').doc('orders').set({data:keep});
+    await Promise.all(Object.entries(
+      keep.reduce((acc,o)=>{ const s=String(o.customerId||'unknown'); (acc[s]=acc[s]||[]).push(o); return acc; },{})
+    ).map(([sid,orders])=>db.collection('cp_orders').doc(sid).set({data:orders})));
     _CACHE.orders=keep;
     localStorage.setItem('cp_orders',JSON.stringify(keep));
     msg.style.display='block';msg.style.color='#2E7D32';

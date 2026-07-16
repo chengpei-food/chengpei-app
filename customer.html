@@ -358,61 +358,62 @@ function dbSave(key, data){
 }
 
 async function initDB(){
-  // 先備份本機訂單，防止雲端被舊版 App 覆蓋後本機也跟著丟失
-  let localOrdersBackup = [];
-  try {
-    const raw = localStorage.getItem('cp_orders');
-    localOrdersBackup = raw ? JSON.parse(raw) : [];
-  } catch(e) {}
-
   await Promise.all([
     dbLoad('products', null),
-    dbLoad('orders', []),
     dbLoad('customers', []),
     dbLoad('announcement', {text:'',active:false}),
     dbLoad('config', {})
   ]);
-
-  // 從 Firestore config 同步下單時段到 localStorage
   const cfg = _CACHE.config || {};
   if(cfg.orderTimeFrom) localStorage.setItem('cp_order_time_from', cfg.orderTimeFrom);
   if(cfg.orderTimeTo)   localStorage.setItem('cp_order_time_to',   cfg.orderTimeTo);
-
-  // 比對：如果本機有訂單但雲端遺失，自動合併顯示並補回雲端
-  if (db && localOrdersBackup.length) {
-    const cloudOrders = _CACHE.orders || [];
-    const toRecover = localOrdersBackup.filter(lo => !cloudOrders.some(co => co.id === lo.id));
-    if (toRecover.length) {
-      // 先合併到 _CACHE，讓「我的訂單」立即顯示正確
-      const merged = [...cloudOrders, ...toRecover];
-      _CACHE.orders = merged;
-      localStorage.setItem('cp_orders', JSON.stringify(merged));
-      // 背景靜默用 transaction 補回雲端
-      recoverMissingOrders(toRecover);
-    }
-  }
-
   if(!_CACHE.products || !_CACHE.products.length) _CACHE.products = INIT_PRODUCTS;
 }
 
-async function recoverMissingOrders(missing) {
-  if (!db || !missing.length) return;
-  try {
-    const ref = db.collection('cp_data').doc('orders');
-    await db.runTransaction(async (t) => {
-      const snap = await t.get(ref);
-      const cloud = (snap.exists && snap.data().data) ? snap.data().data : [];
-      let added = 0;
-      missing.forEach(o => {
-        if (!cloud.some(c => c.id === o.id)) { cloud.push(o); added++; }
-      });
-      if (added > 0) {
-        t.set(ref, {data: cloud});
-        _CACHE.orders = cloud;
-        localStorage.setItem('cp_orders', JSON.stringify(cloud));
-      }
-    });
-  } catch(e) { console.warn('訂單自動補回失敗:', e); }
+// 登入後載入該門市自己的訂單（每間店獨立文件：cp_orders/{storeId}）
+async function loadMyOrders(user){
+  if(!db) return;
+  const storeId=String(user.id);
+  const ref=db.collection('cp_orders').doc(storeId);
+
+  // 備份本機已有的訂單（此門市）
+  let localBackup=[];
+  try{
+    const all=JSON.parse(localStorage.getItem('cp_orders')||'[]');
+    localBackup=all.filter(o=>o.customerId===user.id);
+  }catch(e){}
+
+  try{
+    const snap=await ref.get();
+    let cloudOrders=(snap.exists&&snap.data().data)?snap.data().data:[];
+
+    // 自動補回本機有但雲端沒有的訂單
+    const toRecover=localBackup.filter(lo=>!cloudOrders.some(co=>co.id===lo.id));
+    if(toRecover.length){
+      try{
+        if(!snap.exists){ await ref.set({data:[...cloudOrders,...toRecover]}); }
+        else{ await ref.update({data:firebase.firestore.FieldValue.arrayUnion(...toRecover)}); }
+        cloudOrders=[...cloudOrders,...toRecover];
+      }catch(e){ console.warn('自動補回失敗:',e); cloudOrders=[...cloudOrders,...toRecover]; }
+    }
+    _CACHE.orders=cloudOrders;
+  }catch(e){
+    console.warn('loadMyOrders 失敗:',e);
+    _CACHE.orders=localBackup;
+  }
+  localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
+
+  // 即時監聽此門市的訂單文件
+  ref.onSnapshot(snap=>{
+    if(!snap.exists||!snap.data().data) return;
+    _CACHE.orders=snap.data().data;
+    localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
+    checkUnsyncedOrders();
+    if(document.getElementById('screen-orders')?.classList.contains('active')) renderMyOrders();
+  });
+
+  checkUnsyncedOrders();
+  renderMyOrders();
 }
 
 function getProducts(){ return _CACHE.products || JSON.parse(localStorage.getItem('cp_products')||'null') || INIT_PRODUCTS; }
@@ -452,6 +453,7 @@ function loginSuccess(user) {
   document.getElementById('tabBar').style.display='flex';
   document.getElementById('headerUser').textContent = user.company || user.name;
   hideErr();
+  loadMyOrders(user);
   initApp();
   initFCM('customer', user.account||'');
   goTab('catalog');
@@ -699,20 +701,17 @@ async function submitOrder(){
   if(currentUser) localStorage.removeItem('cp_cart_'+currentUser.id);
   syncAll();renderProducts();
 
-  // 等待 Firestore 寫入，確認成功
-  // 使用交易（transaction）讀取雲端最新訂單清單後再加入，避免多人同時下單互相覆蓋遺失
+  // 寫入此門市自己的文件（cp_orders/{storeId}），避免與其他門市共用文件超過容量限制
   let firestoreOk=false;
   if(db){
     try{
-      const ref=db.collection('cp_data').doc('orders');
-      await db.runTransaction(async(t)=>{
-        const snap=await t.get(ref);
-        const cloudOrders=(snap.exists && snap.data().data) ? snap.data().data : [];
-        if(!cloudOrders.some(o=>o.id===order.id)) cloudOrders.push(order);
-        t.set(ref,{data:cloudOrders});
-        _CACHE.orders=cloudOrders;
-        localStorage.setItem('cp_orders',JSON.stringify(cloudOrders));
-      });
+      const ref=db.collection('cp_orders').doc(String(currentUser.id));
+      try{
+        await ref.update({data:firebase.firestore.FieldValue.arrayUnion(order)});
+      }catch(ue){
+        if(ue.code==='not-found') await ref.set({data:[order]});
+        else throw ue;
+      }
       firestoreOk=true;
     }catch(e){ console.warn('Firestore 寫入失敗:',e); }
   }
@@ -785,13 +784,10 @@ async function checkUnsyncedOrders(){
   if(!db||!currentUser) return;
   try{
     const local=getOrders().filter(o=>o.customerId===currentUser.id);
-    if(!local.length) return;
-    const snap=await db.collection('cp_data').doc('orders').get();
+    if(!local.length){const bar=document.getElementById('recoverBar');if(bar)bar.style.display='none';return;}
+    const snap=await db.collection('cp_orders').doc(String(currentUser.id)).get();
     const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
-    const unsynced=local.filter(lo=>{
-      const match=cloud.find(co=>co.id===lo.id);
-      return !match||(match.customerId!==lo.customerId);
-    });
+    const unsynced=local.filter(lo=>!cloud.some(co=>co.id===lo.id));
     const bar=document.getElementById('recoverBar');
     if(bar) bar.style.display=unsynced.length?'flex':'none';
   }catch(e){}
@@ -805,22 +801,15 @@ async function forceRecoverOrders(){
   try{
     const local=getOrders().filter(o=>o.customerId===currentUser.id);
     if(!local.length){if(msgEl){msgEl.textContent='沒有本機訂單需要補回';setTimeout(()=>{msgEl.style.display='none';},3000);}return;}
-    const ref=db.collection('cp_data').doc('orders');
-    // 直接讀取後寫入（避免 transaction 失敗）
+    const ref=db.collection('cp_orders').doc(String(currentUser.id));
     const snap=await ref.get();
     const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
-    let added=0;
-    local.forEach(lo=>{
-      const matchIdx=cloud.findIndex(co=>co.id===lo.id);
-      if(matchIdx===-1){
-        cloud.push(lo);added++;
-      } else if(cloud[matchIdx].customerId!==lo.customerId){
-        const newId=lo.id+'-'+currentUser.id;
-        cloud.push({...lo,id:newId});
-        added++;
-      }
-    });
-    if(added>0) await ref.set({data:cloud});
+    const toAdd=local.filter(lo=>!cloud.some(co=>co.id===lo.id));
+    const added=toAdd.length;
+    if(added>0){
+      if(!snap.exists){ await ref.set({data:toAdd}); }
+      else{ await ref.update({data:firebase.firestore.FieldValue.arrayUnion(...toAdd)}); }
+    }
     if(added>0){
       if(msgEl){msgEl.style.color='#2E7D32';msgEl.textContent=`✓ 已成功補回 ${added} 張訂單！`;}
       if(bar) bar.style.display='none';
