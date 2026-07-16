@@ -439,7 +439,7 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button class="save-settings-btn" onclick="syncLocalToCloud()" id="syncCloudBtn">☁️ 同步本機資料到雲端</button>
       <div id="syncCloudMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
-      <button class="save-settings-btn" onclick="archiveOldOrders()" id="archiveBtn" style="margin-top:10px;">🗂️ 清理舊訂單（保留近90天）</button>
+      <button class="save-settings-btn" onclick="archiveOldOrders()" id="archiveBtn" style="margin-top:10px;">🗂️ 清理舊訂單（保留近30天）</button>
       <div id="archiveMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
       <button class="danger-btn" onclick="clearAllData()">⚠️ 清除所有訂單資料</button>
@@ -1456,22 +1456,20 @@ async function archiveOldOrders(){
   const msg=document.getElementById('archiveMsg');
   const btn=document.getElementById('archiveBtn');
   if(!db){msg.style.display='block';msg.style.color='#c00';msg.textContent='⚠️ 未連接 Firebase';return;}
-  if(!confirm('將刪除90天前已完成／已拒絕的訂單，最近的訂單和未完成訂單都會保留。確定繼續？')) return;
+  if(!confirm('將刪除30天前的所有訂單（不管狀態），近30天的訂單全部保留。確定繼續？')) return;
   btn.disabled=true;btn.textContent='清理中…';msg.style.display='none';
   try{
-    const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);
+    const cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
     const cutoffStr=cutoff.toISOString().slice(0,10);
     const allOrders=_CACHE.orders||JSON.parse(localStorage.getItem('cp_orders')||'[]');
     const keep=allOrders.filter(o=>{
       const dateStr=(o.createdAt||o.id||'').slice(0,10);
-      const isOld=dateStr<cutoffStr;
-      const isDone=o.status==='done'||o.status==='rejected';
-      return !(isOld&&isDone); // 保留：未到期 OR 未完成
+      return dateStr>=cutoffStr;
     });
     const removed=allOrders.length-keep.length;
     if(removed===0){
-      msg.style.display='block';msg.style.color='var(--teal)';msg.textContent='沒有符合條件的舊訂單可清理。';
-      btn.disabled=false;btn.textContent='🗂️ 清理舊訂單（保留近90天）';return;
+      msg.style.display='block';msg.style.color='var(--teal)';msg.textContent='沒有30天前的訂單可清理。';
+      btn.disabled=false;btn.textContent='🗂️ 清理舊訂單（保留近30天）';return;
     }
     await db.collection('cp_data').doc('orders').set({data:keep});
     _CACHE.orders=keep;
@@ -1482,7 +1480,7 @@ async function archiveOldOrders(){
   }catch(e){
     msg.style.display='block';msg.style.color='#c00';msg.textContent='清理失敗：'+(e.code||e.message);
   }
-  btn.disabled=false;btn.textContent='🗂️ 清理舊訂單（保留近90天）';
+  btn.disabled=false;btn.textContent='🗂️ 清理舊訂單（保留近30天）';
 }
 
 function clearAllData(){
