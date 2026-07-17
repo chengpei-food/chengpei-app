@@ -1534,11 +1534,14 @@ async function syncLocalToCloud(){
       adminPw: localStorage.getItem('cp_admin_pw') || DEFAULT_PW,
       limitedAdminPw: localStorage.getItem('cp_admin_limited_pw') || DEFAULT_LIMITED_PW
     };
+    // 訂單按門市拆分，分別存到 cp_orders/{storeId}
+    const byStore={};
+    orders.forEach(o=>{ const s=String(o.customerId||'unknown'); (byStore[s]=byStore[s]||[]).push(o); });
     await Promise.all([
       db.collection('cp_data').doc('products').set({data: products}),
-      db.collection('cp_data').doc('orders').set({data: orders}),
       db.collection('cp_data').doc('customers').set({data: customers}),
       db.collection('cp_data').doc('config').set({data: config}),
+      ...Object.entries(byStore).map(([sid,ords])=>db.collection('cp_orders').doc(sid).set({data:ords})),
     ]);
     // 同步 _CACHE
     _CACHE.products  = products;
