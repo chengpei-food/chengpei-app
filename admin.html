@@ -1211,7 +1211,7 @@ function renderCustomers(){
   const orders=getOrders();
   const body=document.getElementById('customersBody');
   if(!customers.length){body.innerHTML='<div class="empty-state">尚無客戶帳號<br>請點右上角「新增客戶」建立帳號</div>';return;}
-  body.innerHTML=customers.map(cust=>{
+  body.innerHTML=[...customers].sort((a,b)=>String(a.id).localeCompare(String(b.id),undefined,{numeric:true})).map(cust=>{
     const cOrders=orders.filter(o=>o.customerId===cust.id);
     const total=cOrders.reduce((s,o)=>s+o.total,0);
     return `<div class="cust-card">
