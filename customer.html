@@ -293,6 +293,19 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
     <div class="orders-body" id="ordersBody"></div>
   </div>
 
+  <!-- 庫存頁 -->
+  <div class="screen" id="screen-stock">
+    <div class="search-bar">
+      <div class="search-wrap"><span style="color:var(--text3);font-size:1rem;">🔍</span><input type="text" id="stockSearch" placeholder="搜尋品項名稱或編號…" oninput="renderStock()"></div>
+    </div>
+    <div class="cat-bar" id="stockCatBar"></div>
+    <div style="padding:8px 14px 4px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <span id="stockUpdatedAt" style="font-size:0.72rem;color:var(--text3);"></span>
+      <button onclick="clearStock()" style="font-size:0.72rem;color:#e53935;background:none;border:none;cursor:pointer;padding:4px 0;">清空所有庫存</button>
+    </div>
+    <div class="product-list" id="stockList"></div>
+  </div>
+
 </div>
 
 <!-- 公告 Modal -->
@@ -314,7 +327,8 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
   <div class="tab" id="tab-catalog" onclick="goTab('catalog')"><span class="tab-label">商品</span></div>
   <div class="tab" id="tab-cart" onclick="goTab('cart')"><span class="tab-label">購物車</span><span class="tab-dot" id="tabDot">0</span></div>
   <div class="tab" id="tab-checkout" onclick="goTab('checkout')"><span class="tab-label">結帳</span></div>
-  <div class="tab" id="tab-orders" onclick="goTab('orders')"><span class="tab-label">我的訂單</span></div>
+  <div class="tab" id="tab-stock" onclick="goTab('stock')"><span class="tab-label">庫存</span></div>
+  <div class="tab" id="tab-orders" onclick="goTab('orders')"><span class="tab-label">訂單</span></div>
 </div>
 
 <script>
@@ -329,6 +343,7 @@ try {
   if(typeof FIREBASE_CONFIG!=='undefined' && FIREBASE_CONFIG.projectId && !FIREBASE_CONFIG.projectId.startsWith('YOUR')){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e));
   }
 } catch(e){ console.warn('Firebase 初始化失敗，使用本機儲存', e); }
 
@@ -454,6 +469,7 @@ function loginSuccess(user) {
   document.getElementById('headerUser').textContent = user.company || user.name;
   hideErr();
   loadMyOrders(user);
+  loadMyStock(user);
   initApp();
   initFCM('customer', user.account||'');
   goTab('catalog');
@@ -544,6 +560,7 @@ function renderProducts(){
       <div class="prod-info">
         <div class="prod-name">${p.name}${soldOut?'<span style="display:inline-block;font-size:0.62rem;font-weight:800;color:#c47f00;background:#FEF3DC;border:1px solid #F5A200;border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:middle;">售完</span>':''}</div>
         <div class="prod-spec">${p.spec} <span style="color:var(--text3);font-size:0.65rem;">· ${p.code}</span></div>
+        ${(()=>{const sq=getStock()[p.code];return sq!=null?`<div style="font-size:0.7rem;color:var(--teal);margin-top:2px;">📦 庫存 ${sq} ${p.unit||''}</div>`:''})()}
       </div>
       <div class="prod-foot">
         ${currentUser&&currentUser.showPrice ? `<div class="prod-price">${fmt(p.price)}<span class="prod-unit">/ ${p.unit}</span></div>` : ''}
@@ -826,6 +843,130 @@ async function forceRecoverOrders(){
   }
 }
 
+/* ════════════════════════════
+   庫存管理
+════════════════════════════ */
+let activStockCat='all';
+let _stockSaveTimer=null;
+
+function getStock(){ try{ return JSON.parse(localStorage.getItem('cp_stock_'+(currentUser?.id||''))||'{}'); }catch(e){ return {}; } }
+
+function saveStock(s){
+  const uid=String(currentUser?.id||'');
+  localStorage.setItem('cp_stock_'+uid, JSON.stringify(s));
+  localStorage.setItem('cp_stock_ts_'+uid, new Date().toISOString());
+  updateStockTs();
+  if(_stockSaveTimer) clearTimeout(_stockSaveTimer);
+  _stockSaveTimer=setTimeout(()=>pushStockToCloud(s), 1500);
+}
+
+async function pushStockToCloud(s){
+  if(!db||!currentUser) return;
+  try{
+    await db.collection('cp_stock').doc(String(currentUser.id)).set({
+      data: s,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: currentUser.name||currentUser.account||''
+    });
+  }catch(e){ console.warn('庫存雲端儲存失敗:',e); }
+}
+
+async function loadMyStock(user){
+  if(!db) return;
+  const storeId=String(user.id);
+  const ref=db.collection('cp_stock').doc(storeId);
+  try{
+    const snap=await ref.get();
+    if(snap.exists&&snap.data().data){
+      const cloudStock=snap.data().data;
+      localStorage.setItem('cp_stock_'+storeId, JSON.stringify(cloudStock));
+      if(snap.data().updatedAt){
+        try{ localStorage.setItem('cp_stock_ts_'+storeId, snap.data().updatedAt.toDate().toISOString()); }catch(e){}
+      }
+      updateStockTs();
+      if(document.getElementById('screen-stock')?.classList.contains('active')) renderStock();
+    }
+  }catch(e){ console.warn('loadMyStock 失敗:',e); }
+  ref.onSnapshot(snap=>{
+    if(!snap.exists||!snap.data().data) return;
+    const cloudStock=snap.data().data;
+    localStorage.setItem('cp_stock_'+storeId, JSON.stringify(cloudStock));
+    if(snap.data().updatedAt){
+      try{ localStorage.setItem('cp_stock_ts_'+storeId, snap.data().updatedAt.toDate().toISOString()); }catch(e){}
+    }
+    updateStockTs();
+    if(document.getElementById('screen-stock')?.classList.contains('active')) renderStock();
+  });
+}
+
+function updateStockTs(){
+  const ts=localStorage.getItem('cp_stock_ts_'+(currentUser?.id||''));
+  const el=document.getElementById('stockUpdatedAt');
+  if(el) el.textContent=ts?'上次更新：'+ts.slice(0,10)+' '+ts.slice(11,16):'';
+}
+function setStockQty(code,val){
+  const s=getStock(); val=Math.max(0,parseInt(val)||0);
+  if(val===0) delete s[code]; else s[code]=val;
+  saveStock(s);
+}
+function clearStock(){
+  if(!confirm('確定清空所有庫存記錄？')) return;
+  const uid=String(currentUser?.id||'');
+  localStorage.removeItem('cp_stock_'+uid);
+  localStorage.removeItem('cp_stock_ts_'+uid);
+  if(db&&currentUser){
+    db.collection('cp_stock').doc(uid).set({
+      data:{},
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy:currentUser.name||currentUser.account||''
+    }).catch(e=>console.warn('清空庫存雲端失敗:',e));
+  }
+  updateStockTs(); renderStock();
+}
+function renderStockCats(prods){
+  const cats=['all',...[...new Set(prods.map(p=>p.category).filter(Boolean))].sort()];
+  const bar=document.getElementById('stockCatBar');
+  if(!bar) return;
+  bar.innerHTML=cats.map(c=>`<div class="cat-chip${activStockCat===c?' active':''}" onclick="activStockCat='${c}';renderStock();">${c==='all'?'全部':c}</div>`).join('');
+}
+function renderStock(){
+  if(!currentUser) return;
+  const allProds=getProducts();
+  const allowed=currentUser.allowedProducts;
+  let prods=allProds.filter(p=>p.active!==false&&(!allowed||allowed.includes(p.code)));
+  const q=(document.getElementById('stockSearch')?.value||'').trim().toLowerCase();
+  if(activStockCat!=='all') prods=prods.filter(p=>p.category===activStockCat);
+  if(q) prods=prods.filter(p=>p.name.toLowerCase().includes(q)||(p.spec||'').toLowerCase().includes(q)||p.code.toLowerCase().includes(q));
+  prods.sort((a,b)=>a.code.localeCompare(b.code));
+  renderStockCats(allProds.filter(p=>p.active!==false&&(!allowed||allowed.includes(p.code))));
+  updateStockTs();
+  const stock=getStock();
+  const el=document.getElementById('stockList');
+  if(!el) return;
+  if(!prods.length){ el.innerHTML='<div style="text-align:center;color:var(--text3);padding:60px 20px;">找不到品項</div>'; return; }
+  el.innerHTML=prods.map(p=>{
+    const qty=stock[p.code]||0;
+    return `<div class="prod-card">
+      <div class="prod-info">
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-spec">${p.spec||''} · ${p.code}</div>
+      </div>
+      <div class="prod-foot" style="gap:6px;">
+        <div class="qty-row">
+          <button class="q-btn" onclick="adjStockQty('${p.code}',-1)">−</button>
+          <input class="q-num" type="number" id="sq-${p.code}" value="${qty}" min="0" onchange="setStockQty('${p.code}',this.value)" style="width:44px;">
+          <button class="q-btn" onclick="adjStockQty('${p.code}',1)">＋</button>
+        </div>
+        <span class="prod-unit">${p.unit||''}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function adjStockQty(code,d){
+  const el=document.getElementById('sq-'+code); if(!el) return;
+  const v=Math.max(0,(parseInt(el.value)||0)+d); el.value=v; setStockQty(code,v);
+}
+
 function toggleOrderDetail(id){
   const detail=document.getElementById('orderDetail-'+id);
   const arrow=document.getElementById('orderArrow-'+id);
@@ -853,12 +994,13 @@ function syncAll(){
 }
 
 function goTab(tab){
-  ['catalog','cart','checkout','orders'].forEach(t=>{
+  ['catalog','cart','checkout','stock','orders'].forEach(t=>{
     document.getElementById('screen-'+t).classList.toggle('active',t===tab);
     const tabEl=document.getElementById('tab-'+t);
     if(tabEl) tabEl.classList.toggle('active',t===tab);
   });
   if(tab==='orders'){ renderMyOrders(); checkUnsyncedOrders(); }
+  if(tab==='stock') renderStock();
 }
 
 function initApp(){

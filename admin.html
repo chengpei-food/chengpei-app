@@ -483,6 +483,7 @@ try {
   if(typeof FIREBASE_CONFIG!=='undefined' && FIREBASE_CONFIG.projectId && !FIREBASE_CONFIG.projectId.startsWith('YOUR')){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e));
     console.log('✅ Firebase 已連線');
   }
 } catch(e){ console.warn('Firebase 初始化失敗，使用本機儲存', e); }
