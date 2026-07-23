@@ -1055,18 +1055,7 @@ if('serviceWorker' in navigator){
 }
 (async()=>{
   await initDB();
-  const saved=sessionStorage.getItem('cp_user');
-  if(saved){ currentUser=JSON.parse(saved); loginSuccess(currentUser); return; }
-  const savedLogin=localStorage.getItem('cp_saved_login');
-  if(savedLogin){
-    try{
-      const {account,pw}=JSON.parse(savedLogin);
-      document.getElementById('loginAccount').value=account;
-      document.getElementById('loginPw').value=pw;
-      document.getElementById('rememberMe').checked=true;
-    }catch(e){}
-  }
-  // 即時監聽：品項或客戶資料有更新時自動同步
+  // 即時監聽：永遠設定，不管有沒有自動登入
   if(db){
     db.collection('cp_data').doc('products').onSnapshot(snap=>{
       if(!snap.exists||!snap.data().data) return;
@@ -1078,7 +1067,6 @@ if('serviceWorker' in navigator){
       if(!snap.exists||!snap.data().data) return;
       _CACHE.customers=snap.data().data;
       localStorage.setItem('cp_customers',JSON.stringify(_CACHE.customers));
-      // 更新目前登入的客戶資料（allowedProducts 等欄位）
       if(currentUser){
         const fresh=_CACHE.customers.find(c=>c.id===currentUser.id);
         if(fresh){ currentUser=fresh; sessionStorage.setItem('cp_user',JSON.stringify(fresh)); renderProducts(); }
@@ -1090,6 +1078,17 @@ if('serviceWorker' in navigator){
       if(cfg.orderTimeFrom) localStorage.setItem('cp_order_time_from',cfg.orderTimeFrom);
       if(cfg.orderTimeTo)   localStorage.setItem('cp_order_time_to',cfg.orderTimeTo);
     });
+  }
+  const saved=sessionStorage.getItem('cp_user');
+  if(saved){ currentUser=JSON.parse(saved); loginSuccess(currentUser); return; }
+  const savedLogin=localStorage.getItem('cp_saved_login');
+  if(savedLogin){
+    try{
+      const {account,pw}=JSON.parse(savedLogin);
+      document.getElementById('loginAccount').value=account;
+      document.getElementById('loginPw').value=pw;
+      document.getElementById('rememberMe').checked=true;
+    }catch(e){}
   }
 })();
 </script>
