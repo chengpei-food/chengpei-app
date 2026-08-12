@@ -689,6 +689,7 @@ function renderDashboard(){
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
+      ${o.note?`<div class="oc-note">📝 ${o.note}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
     </div>`).join(''):'<div class="empty-state">尚無訂單</div>'}`;
 }
