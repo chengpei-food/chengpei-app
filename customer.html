@@ -699,7 +699,7 @@ async function submitOrder(){
   const note=document.getElementById('custNote').value.trim();
   const _d=twNow(),_pad=n=>String(n).padStart(2,'0');
   const _custSuffix=(currentUser.account||currentUser.id||'').toString().replace(/[^a-zA-Z0-9一-鿿]/g,'').slice(0,6)||'cust';
-  const no=`${_d.getFullYear()}${_pad(_d.getMonth()+1)}${_pad(_d.getDate())}-${_pad(_d.getHours())}${_pad(_d.getMinutes())}-${_custSuffix}`;
+  const no=`${_d.getFullYear()}${_pad(_d.getMonth()+1)}${_pad(_d.getDate())}-${_pad(_d.getHours())}${_pad(_d.getMinutes())}${_pad(_d.getSeconds())}-${_custSuffix}`;
   const order={
     id:no,customerId:currentUser.id,customerAccount:currentUser.account||'',
     customerName:currentUser.name,

@@ -88,6 +88,11 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 /* ── Orders screen ── */
 .filter-bar{background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:10px 13px;overflow-x:scroll;-webkit-overflow-scrolling:touch;white-space:nowrap;flex-shrink:0;scrollbar-width:none;}
 .filter-bar::-webkit-scrollbar{display:none;}
+@media(min-width:768px){
+  #custFilterToggle{display:block!important;}
+  #custFilterBar{overflow-x:visible;white-space:normal;display:none!important;flex-wrap:wrap;gap:6px;border-top:none!important;}
+  #custFilterBar.expanded{display:flex!important;}
+}
 .filter-chip{display:inline-block;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1.5px solid var(--admin-border);background:transparent;color:var(--text2);margin-right:7px;transition:all 0.15s;}
 .filter-chip.active{background:var(--teal);color:white;border-color:var(--teal);}
 .order-card{background:var(--admin-card);border-radius:var(--radius);padding:14px 15px;margin-bottom:10px;border:1px solid var(--admin-border);}
@@ -243,7 +248,8 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button onclick="clearDateFilter()" style="background:none;border:1.5px solid var(--admin-border);border-radius:8px;padding:5px 10px;font-size:0.78rem;color:var(--text2);cursor:pointer;white-space:nowrap;">清除</button>
     </div>
     <div class="filter-bar" id="filterBar"></div>
-    <div class="filter-bar" id="custFilterBar" style="border-top:1px solid var(--admin-border);white-space:normal;display:flex;flex-wrap:wrap;gap:6px 6px;"></div>
+    <div id="custFilterToggle" onclick="toggleCustFilter()" style="display:none;padding:7px 13px;font-size:0.78rem;color:var(--text2);cursor:pointer;background:var(--admin-card);border-top:1px solid var(--admin-border);user-select:none;">門市篩選 <span id="custFilterArrow">▾</span></div>
+    <div class="filter-bar" id="custFilterBar" style="border-top:1px solid var(--admin-border);"></div>
     <div class="screen-body" id="ordersBody"></div>
   </div>
 
@@ -715,9 +721,22 @@ function renderCustFilterBar(){
     if(key && !seen.has(key)){ seen.add(key); custs.push([key, key]); }
   });
   document.getElementById('custFilterBar').innerHTML=custs.map(([v,l])=>`<span class="filter-chip${v===orderCustFilter?' active':''}" onclick="setCustFilter('${v.replace(/'/g,"\\'")}')">${l}</span>`).join('');
+  const toggle=document.getElementById('custFilterToggle');
+  const arrow=document.getElementById('custFilterArrow');
+  if(toggle){
+    const label=orderCustFilter==='all'?'門市篩選':'門市：'+orderCustFilter;
+    const expanded=document.getElementById('custFilterBar').classList.contains('expanded');
+    toggle.innerHTML=label+' <span id="custFilterArrow">'+(expanded?'▴':'▾')+'</span>';
+  }
 }
 
 function setCustFilter(v){ orderCustFilter=v; renderCustFilterBar(); renderOrders(); }
+function toggleCustFilter(){
+  const bar=document.getElementById('custFilterBar');
+  const arrow=document.getElementById('custFilterArrow');
+  bar.classList.toggle('expanded');
+  if(arrow) arrow.textContent=bar.classList.contains('expanded')?'▴':'▾';
+}
 
 function clearDateFilter(){
   document.getElementById('orderDateFrom').value='';
