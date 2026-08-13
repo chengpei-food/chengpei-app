@@ -86,7 +86,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .s-rejected{background:#FDECEA;color:#C62828;border:1px solid #FFCDD2;}
 
 /* ── Orders screen ── */
-.filter-bar{background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:10px 13px;overflow-x:auto;white-space:nowrap;flex-shrink:0;scrollbar-width:none;}
+.filter-bar{background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:10px 13px;overflow-x:scroll;-webkit-overflow-scrolling:touch;white-space:nowrap;flex-shrink:0;scrollbar-width:none;}
 .filter-bar::-webkit-scrollbar{display:none;}
 .filter-chip{display:inline-block;padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1.5px solid var(--admin-border);background:transparent;color:var(--text2);margin-right:7px;transition:all 0.15s;}
 .filter-chip.active{background:var(--teal);color:white;border-color:var(--teal);}
@@ -243,7 +243,7 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button onclick="clearDateFilter()" style="background:none;border:1.5px solid var(--admin-border);border-radius:8px;padding:5px 10px;font-size:0.78rem;color:var(--text2);cursor:pointer;white-space:nowrap;">清除</button>
     </div>
     <div class="filter-bar" id="filterBar"></div>
-    <div class="filter-bar" id="custFilterBar" style="border-top:1px solid var(--admin-border);"></div>
+    <div class="filter-bar" id="custFilterBar" style="border-top:1px solid var(--admin-border);white-space:normal;display:flex;flex-wrap:wrap;gap:6px 6px;"></div>
     <div class="screen-body" id="ordersBody"></div>
   </div>
 
