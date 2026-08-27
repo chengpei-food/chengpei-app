@@ -687,7 +687,7 @@ function renderCheckout(){
   const showP=currentUser&&currentUser.showPrice;
   const total=showP ? items.reduce((s,i)=>s+i.price*i.qty,0) : 0;
   document.getElementById('summaryCard').innerHTML=
-    items.map(i=>`<div class="summary-row"><span>${i.name} × ${i.qty} ${i.unit}</span>${showP?`<span>${fmt(i.price*i.qty)}</span>`:''}</div>`).join('')+
+    items.map(i=>`<div class="summary-row"><span>${i.name}${i.code?` <span style="font-size:0.75rem;color:var(--text3);">[${i.code}]</span>`:''} × ${i.qty} ${i.unit}</span>${showP?`<span>${fmt(i.price*i.qty)}</span>`:''}</div>`).join('')+
     (showP ? `<div class="summary-total"><span>合計</span><span>${fmt(total)}</span></div>` : '');
 }
 
