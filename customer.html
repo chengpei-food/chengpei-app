@@ -664,7 +664,7 @@ function renderCart(){
   }
   body.innerHTML=items.map(it=>`<div class="cart-item">
     <div class="cart-item-top"><div class="cart-item-name">${it.name}</div><button class="cart-del" onclick="delCart('${it.code}')">✕</button></div>
-    <div class="cart-item-spec">${it.spec}</div>
+    <div class="cart-item-spec">${it.spec}${it.code?' · '+it.code:''}</div>
     <div class="cart-item-foot">
       <div class="qty-row"><button class="q-btn" onclick="cartAdj('${it.code}',-1)">−</button><input class="q-num" type="number" value="${it.qty}" onchange="cartSet('${it.code}',this.value)"><button class="q-btn" onclick="cartAdj('${it.code}',1)">+</button><span class="prod-unit" style="margin-left:3px;">/ ${it.unit||''}</span></div>
       ${currentUser&&currentUser.showPrice ? `<div class="cart-item-sub">${fmt(it.price*it.qty)}</div>` : ''}

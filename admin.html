@@ -767,7 +767,7 @@ function renderOrders(){
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
     ${o.note?`<div class="oc-note">📝 ${o.note}</div>`:''}
-    <div class="oc-items">${o.items.map(i=>`${i.name} × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
+    <div class="oc-items">${o.items.map(i=>`${i.name}${i.code?' <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>':''} × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
       <div style="display:flex;align-items:center;gap:8px;">
