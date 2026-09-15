@@ -1327,6 +1327,7 @@ function saveCust(){
       const idx=customers.findIndex(cu=>cu.id===id);
       if(idx<0) return;
       customers[idx]={...customers[idx],account,name,company,logistics,phone,mobile,orderDays,showPrice};
+      delete customers[idx].logisticsByDay;
       if(pw && pw.length>=4) customers[idx].pw=pw;
     } else {
       customers.push({id:'C'+Date.now(),account,name,company,logistics,phone,mobile,orderDays,showPrice,pw,createdAt:twISOString()});
