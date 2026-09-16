@@ -568,8 +568,9 @@ function renderProducts(){
           ${soldOut ? '<span style="font-size:0.75rem;color:#c47f00;font-weight:700;">暫時售完</span>' : `
           <div class="qty-row">
             <button class="q-btn" onclick="adjQty('${p.code}',-1)">−</button>
-            <input class="q-num" type="number" id="qty-${p.code}" value="0" min="0" onchange="setQtyInput('${p.code}',this.value)">
+            <input class="q-num" type="number" id="qty-${p.code}" value="0" min="0" step="${p.step||1}" onchange="setQtyInput('${p.code}',this.value)">
             <button class="q-btn" onclick="adjQty('${p.code}',1)">+</button>
+            ${p.step>1?`<span style="font-size:0.68rem;color:var(--text3);margin-left:2px;">×${p.step}</span>`:''}
             <span class="prod-unit">/ ${p.unit}</span>
           </div>
           <button class="add-btn${inCart?' added':''}" id="addbtn-${p.code}" onclick="addToCart('${p.code}')" ${!inCart?'disabled':''} style="${!inCart?'opacity:0.35;cursor:not-allowed;':''}">${inCart?'✓ 已加入':'加入'}</button>`}
@@ -584,8 +585,8 @@ function twNow(){return new Date(new Date().toLocaleString('en-US',{timeZone:'As
 function twISOString(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
 function twDateStr(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
 
-function adjQty(code,d){const el=document.getElementById('qty-'+code);if(!el)return;let v=Math.max(0,(parseInt(el.value)||0)+d);el.value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
-function setQtyInput(code,v){v=Math.max(0,parseInt(v)||0);document.getElementById('qty-'+code).value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
+function adjQty(code,d){const el=document.getElementById('qty-'+code);if(!el)return;const p=getProducts().find(x=>x.code===code);const step=(p&&p.step>1)?p.step:1;let v=Math.max(0,(parseInt(el.value)||0)+d*step);el.value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
+function setQtyInput(code,v){const p=getProducts().find(x=>x.code===code);const step=(p&&p.step>1)?p.step:1;v=Math.max(0,parseInt(v)||0);v=Math.round(v/step)*step;document.getElementById('qty-'+code).value=v;updateAddBtn(code,v);if(cart[code]){if(v===0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
 function updateAddBtn(code,qty){const btn=document.getElementById('addbtn-'+code);if(!btn||btn.classList.contains('added'))return;const on=qty>0;btn.disabled=!on;btn.style.opacity=on?'1':'0.35';btn.style.cursor=on?'pointer':'not-allowed';}
 function addToCart(code){
   const p=getProducts().find(x=>x.code===code);

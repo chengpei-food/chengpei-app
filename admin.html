@@ -271,7 +271,10 @@ input:checked + .slider:before{transform:translateX(20px);}
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">品名 *</label><input type="text" id="pf-name" placeholder="品項名稱" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">單位 *</label><input type="text" id="pf-unit" placeholder="包、箱、盒…" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
       </div>
-      <div style="margin-bottom:10px;"><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">規格</label><input type="text" id="pf-spec" placeholder="箱/8包/5斤" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
+      <div style="display:grid;grid-template-columns:1fr 90px;gap:10px;margin-bottom:10px;">
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">規格</label><input type="text" id="pf-spec" placeholder="箱/8包/5斤" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">叫貨倍數</label><input type="number" id="pf-step" placeholder="1" min="1" step="1" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><div style="font-size:0.65rem;color:var(--text3);margin-top:2px;">空白=每次加減1</div></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">售價 *</label><input type="number" id="pf-price" placeholder="0" min="0" step="0.5" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲存方式</label>
@@ -1118,6 +1121,7 @@ function openProdForm(code){
     document.getElementById('pf-name').value=p.name;
     document.getElementById('pf-unit').value=p.unit||'';
     document.getElementById('pf-spec').value=p.spec||'';
+    document.getElementById('pf-step').value=(p.step&&p.step>1)?p.step:'';
     document.getElementById('pf-price').value=(p.price!=null)?p.price:'';
     document.getElementById('pf-storage').value=p.storage||'常溫';
     document.getElementById('pf-category').value=p.category||'未分類';
@@ -1130,7 +1134,7 @@ function openProdForm(code){
     document.getElementById('pf-code').style.background='white';
     document.getElementById('pf-code').style.color='#1A1A1A';
     document.getElementById('pf-code-hint').textContent='';
-    ['pf-name','pf-unit','pf-spec','pf-price'].forEach(id=>document.getElementById(id).value='');
+    ['pf-name','pf-unit','pf-spec','pf-step','pf-price'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('pf-storage').value='常溫';
     document.getElementById('pf-category').value='未分類';
   }
@@ -1150,6 +1154,7 @@ function saveProd(){
   const unit=document.getElementById('pf-unit').value.trim();
   const spec=document.getElementById('pf-spec').value.trim();
   const price=parseFloat(document.getElementById('pf-price').value);
+  const stepVal=parseInt(document.getElementById('pf-step').value)||1;
   const storage=document.getElementById('pf-storage').value;
   const category=document.getElementById('pf-category').value;
   const errEl=document.getElementById('prodFormErr');
@@ -1164,7 +1169,7 @@ function saveProd(){
     // 更新
     const p=prods.find(x=>x.code===editCode);
     if(!p) return;
-    p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category;
+    p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category; p.step=stepVal>1?stepVal:undefined;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
     p.category_display=_selIdx>=0?document.getElementById('pf-category').options[_selIdx].text:category;
   } else {
@@ -1172,7 +1177,9 @@ function saveProd(){
     if(prods.find(x=>x.code===inputCode)) return showErr('⚠️ 此編碼已存在，請換一個');
     const _si=document.getElementById('pf-category').selectedIndex;
     const catDisplay=_si>=0?document.getElementById('pf-category').options[_si].text:category;
-    prods.push({code:inputCode,name,spec,unit,price,category,storage,category_display:catDisplay,status:'YES'});
+    const newProd={code:inputCode,name,spec,unit,price,category,storage,category_display:catDisplay,status:'YES'};
+    if(stepVal>1) newProd.step=stepVal;
+    prods.push(newProd);
     // 新品項自動加入所有有品項權限清單的客戶
     const custs=getCustomers();
     let custsChanged=false;
