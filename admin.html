@@ -830,14 +830,19 @@ function deleteOrder(id){
 }
 
 /* ── Excel Export（Template 格式） ── */
-function exportExcel(mode='all', storeId=null){
+function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
   const allOrders=getOrders();
   if(!allOrders.length) return alert('目前沒有訂單資料');
 
   const todayStr=twDateStr();
-  let filtered=mode==='today'
-    ? allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr)
-    : allOrders;
+  let filtered;
+  if(mode==='today'){
+    filtered=allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr);
+  } else if(mode==='range'&&dateFrom&&dateTo){
+    filtered=allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)>=dateFrom&&o.createdAt.slice(0,10)<=dateTo);
+  } else {
+    filtered=allOrders;
+  }
   if(storeId) filtered=filtered.filter(o=>(o.customerId===storeId||o.customerAccount===storeId));
   if(!filtered.length) return alert(storeId?'此店家在選定範圍內沒有訂單':'今天目前沒有訂單');
 
@@ -1014,11 +1019,26 @@ function closeExportByStore(){
   document.getElementById('exportStoreModal').style.display='none';
 }
 
+function toggleExportDateRange(){
+  const val = document.querySelector('input[name="exportRange"]:checked').value;
+  const row = document.getElementById('exportDateRangeRow');
+  if(row) row.style.display = val==='range' ? 'flex' : 'none';
+}
+
 function doExportByStore(){
   if(!_exportStoreSelected) return alert('請先選擇一個店家');
   const range = document.querySelector('input[name="exportRange"]:checked').value;
-  closeExportByStore();
-  exportExcel(range, _exportStoreSelected);
+  if(range==='range'){
+    const df = document.getElementById('exportDateFrom').value;
+    const dt = document.getElementById('exportDateTo').value;
+    if(!df||!dt) return alert('請選擇起訖日期');
+    if(df>dt) return alert('起始日期不能晚於結束日期');
+    closeExportByStore();
+    exportExcel('range', _exportStoreSelected, df, dt);
+  } else {
+    closeExportByStore();
+    exportExcel(range, _exportStoreSelected);
+  }
 }
 
 /* ── Products ── */
@@ -1789,13 +1809,21 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
       <input type="text" id="storeSearchInput" placeholder="搜尋店家名稱或帳號…" oninput="filterStoreList()" style="width:100%;padding:9px 11px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
     </div>
     <div id="storeList" style="max-height:280px;overflow-y:auto;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:14px;"></div>
-    <div style="margin-bottom:14px;display:flex;gap:8px;">
+    <div style="margin-bottom:10px;display:flex;gap:8px;">
       <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;" id="exportRangeToday">
-        <input type="radio" name="exportRange" value="today" style="accent-color:#007787;"> 今天
+        <input type="radio" name="exportRange" value="today" style="accent-color:#007787;" onchange="toggleExportDateRange()"> 今天
       </label>
       <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;" id="exportRangeAll">
-        <input type="radio" name="exportRange" value="all" checked style="accent-color:#007787;"> 全部
+        <input type="radio" name="exportRange" value="all" checked style="accent-color:#007787;" onchange="toggleExportDateRange()"> 全部
       </label>
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px solid #ccc;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;" id="exportRangeCustom">
+        <input type="radio" name="exportRange" value="range" style="accent-color:#007787;" onchange="toggleExportDateRange()"> 自訂
+      </label>
+    </div>
+    <div id="exportDateRangeRow" style="display:none;margin-bottom:10px;gap:8px;align-items:center;">
+      <input type="date" id="exportDateFrom" style="flex:1;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.88rem;">
+      <span style="color:#888;font-size:0.85rem;">至</span>
+      <input type="date" id="exportDateTo" style="flex:1;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.88rem;">
     </div>
     <div style="display:flex;gap:10px;">
       <button onclick="closeExportByStore()" style="flex:1;padding:11px;border:1.5px solid #ccc;border-radius:10px;background:white;font-size:0.9rem;cursor:pointer;color:#333;font-weight:600;">取消</button>
