@@ -829,6 +829,23 @@ function deleteOrder(id){
   renderOrders();
 }
 
+/* ── 解析物流文字，依送貨星期幾取得司機名稱 ── */
+function parseLogisticsForDow(logisticsStr, dow){
+  if(!logisticsStr) return '';
+  // 若是簡單純名字（沒有「週」字），直接回傳
+  if(!logisticsStr.includes('週')) return logisticsStr;
+  const dayMap={'日':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
+  // 切割空白，處理 "週三：丁穎揚" 或 "週一/五：林孟毅" 格式
+  const parts=logisticsStr.split(/\s+/);
+  for(const part of parts){
+    const m=part.match(/^週([日一二三四五六\/]+)：(.+)$/);
+    if(!m) continue;
+    const days=m[1].split('/').map(d=>dayMap[d]).filter(d=>d!==undefined);
+    if(days.includes(dow)) return m[2];
+  }
+  return logisticsStr; // 找不到對應星期，回傳原始字串
+}
+
 /* ── Excel Export（Template 格式） ── */
 function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
   const allOrders=getOrders();
@@ -881,7 +898,7 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
     const cust=custMap[o.customerId]||custByAccount[o.customerAccount]||custByCompany[o.customerCompany]||{};
     const custCode=cust.account||o.customerAccount||o.customerId||'';
     const custName=o.customerCompany||o.customerName||'';
-    const logistics=(cust.logisticsByDay&&_delivDow!==null&&cust.logisticsByDay[String(_delivDow)])||cust.logistics||'';
+    const logistics=(cust.logisticsByDay&&_delivDow!==null&&cust.logisticsByDay[String(_delivDow)])||(_delivDow!==null?parseLogisticsForDow(cust.logistics||'',_delivDow):cust.logistics||'');
     const contact=cust.name||'';
     const note=o.note||'';
 
