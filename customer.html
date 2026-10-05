@@ -673,8 +673,8 @@ function renderCart(){
   </div>`).join('');
 }
 function delCart(code){delete cart[code];syncAll();renderProducts();}
-function cartAdj(code,d){if(cart[code]){cart[code].qty=Math.max(1,cart[code].qty+d);syncAll();}}
-function cartSet(code,v){v=parseInt(v)||0;if(cart[code]){if(v<=0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();}}}
+function cartAdj(code,d){if(cart[code]){const p=getProducts().find(x=>x.code===code);const step=(p&&p.step>1)?p.step:1;const newQty=Math.max(step,cart[code].qty+d*step);cart[code].qty=newQty;syncAll();renderCart();}}
+function cartSet(code,v){v=parseInt(v)||0;const p=getProducts().find(x=>x.code===code);const step=(p&&p.step>1)?p.step:1;v=Math.round(v/step)*step;if(cart[code]){if(v<=0){delete cart[code];syncAll();renderProducts();}else{cart[code].qty=v;syncAll();renderCart();}}}
 
 /* ════════════════════════════
    CHECKOUT
