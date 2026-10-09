@@ -488,10 +488,16 @@ const DEFAULT_LIMITED_PW = '88888888';
 
 /* ── Firebase / 雲端資料庫 ── */
 let db = null;
+let _authReady = Promise.resolve();
 try {
   if(typeof FIREBASE_CONFIG!=='undefined' && FIREBASE_CONFIG.projectId && !FIREBASE_CONFIG.projectId.startsWith('YOUR')){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    // 等匿名登入完成才開始讀寫，避免監聽在登入前啟動被拒絕而默默失效
+    _authReady = new Promise(res=>{
+      const t=setTimeout(res,8000);
+      firebase.auth().onAuthStateChanged(u=>{ if(u){ clearTimeout(t); res(); } });
+    });
     firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e));
     console.log('✅ Firebase 已連線');
   }
@@ -523,6 +529,7 @@ function dbSave(key, data){
 }
 
 async function initDB(){
+  await _authReady;
   await Promise.all([
     dbLoad('products', null),
     dbLoad('orders', []),
@@ -583,19 +590,51 @@ async function initDB(){
       console.log('訂單遷移完成，共',Object.keys(byStore).length,'間門市');
     }).catch(e=>console.warn('遷移失敗:',e));
 
-    db.collection('cp_orders').onSnapshot(snapshot=>{
-      let allOrders=[];
-      snapshot.forEach(doc=>{ if(doc.data().data) allOrders=allOrders.concat(doc.data().data); });
-      _CACHE.orders=allOrders;
-      localStorage.setItem('cp_orders',JSON.stringify(allOrders));
-      if(sessionStorage.getItem('cp_admin')==='1'){
-        updatePendingDot?.();
-        const active=document.querySelector('.tab.active')?.id;
-        if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
-        else if(active==='tab-dashboard') renderDashboard();
-      }
-    });
+    startOrdersListener();
   }
+}
+
+/* ── 訂單即時監聽（斷線自動重連） ── */
+let _knownOrderIds=new Set();     // 後台看過的所有訂單 ID
+let _lastSyncedByStore={};        // 每間店雲端最後一次的內容（JSON）
+function startOrdersListener(){
+  db.collection('cp_orders').onSnapshot(snapshot=>{
+    let allOrders=[];
+    const synced={};
+    snapshot.forEach(doc=>{
+      const arr=doc.data().data||[];
+      synced[doc.id]=JSON.stringify(arr);
+      allOrders=allOrders.concat(arr);
+    });
+    _lastSyncedByStore=synced;
+    allOrders.forEach(o=>_knownOrderIds.add(o.id));
+    _CACHE.orders=allOrders;
+    localStorage.setItem('cp_orders',JSON.stringify(allOrders));
+    showSyncWarn(false);
+    if(sessionStorage.getItem('cp_admin')==='1'){
+      updatePendingDot?.();
+      const active=document.querySelector('.tab.active')?.id;
+      if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
+      else if(active==='tab-dashboard') renderDashboard();
+    }
+  }, err=>{
+    console.warn('訂單監聽中斷，5 秒後重試:',err);
+    showSyncWarn(true);
+    setTimeout(startOrdersListener,5000);
+  });
+}
+function showSyncWarn(on){
+  let el=document.getElementById('syncWarn');
+  if(!el){
+    if(!on) return;
+    el=document.createElement('div');
+    el.id='syncWarn';
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#e53935;color:white;text-align:center;padding:8px;font-size:0.85rem;font-weight:700;cursor:pointer;';
+    el.textContent='⚠️ 雲端連線中斷，訂單可能不是最新，正在重新連線…（點此重新整理）';
+    el.onclick=()=>location.reload();
+    document.body.appendChild(el);
+  }
+  el.style.display=on?'block':'none';
 }
 
 function getAdminPw(){ return (_CACHE.config||{}).adminPw || localStorage.getItem('cp_admin_pw') || DEFAULT_PW; }
@@ -609,8 +648,20 @@ function saveOrders(d){
   if(!db) return;
   const byStore={};
   d.forEach(o=>{ const sid=String(o.customerId||'unknown'); if(!byStore[sid])byStore[sid]=[]; byStore[sid].push(o); });
-  Object.entries(byStore).forEach(([sid,orders])=>{
-    db.collection('cp_orders').doc(sid).set({data:orders}).catch(e=>console.warn('saveOrders:',sid,e));
+  const sids=new Set([...Object.keys(byStore),...Object.keys(_lastSyncedByStore)]);
+  sids.forEach(sid=>{
+    const next=byStore[sid]||[];
+    // 只寫有變動的門市，避免用舊資料覆蓋其他門市
+    if(JSON.stringify(next)===_lastSyncedByStore[sid]) return;
+    const ref=db.collection('cp_orders').doc(sid);
+    db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      const cloud=(snap.exists&&snap.data().data)||[];
+      const nextIds=new Set(next.map(o=>o.id));
+      // 保留雲端上「後台還沒看過」的新訂單，不會被覆蓋掉
+      const unseen=cloud.filter(o=>!nextIds.has(o.id)&&!_knownOrderIds.has(o.id));
+      tx.set(ref,{data:[...next,...unseen]});
+    }).catch(e=>{ console.warn('saveOrders:',sid,e); showSyncWarn(true); });
   });
 }
 function getCustomers(){ return _CACHE.customers || JSON.parse(localStorage.getItem('cp_customers')||'[]'); }

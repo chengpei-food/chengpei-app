@@ -339,10 +339,16 @@ const INIT_PRODUCTS = [{"code": "AE0012", "name": "珍珠(大)", "spec": "箱/8�
 
 /* ── Firebase 雲端資料庫 ── */
 let db = null;
+let _authReady = Promise.resolve();
 try {
   if(typeof FIREBASE_CONFIG!=='undefined' && FIREBASE_CONFIG.projectId && !FIREBASE_CONFIG.projectId.startsWith('YOUR')){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    // 等匿名登入完成才開始讀寫，避免監聽在登入前啟動被拒絕而默默失效
+    _authReady = new Promise(res=>{
+      const t=setTimeout(res,8000);
+      firebase.auth().onAuthStateChanged(u=>{ if(u){ clearTimeout(t); res(); } });
+    });
     firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e));
   }
 } catch(e){ console.warn('Firebase 初始化失敗，使用本機儲存', e); }
@@ -373,6 +379,7 @@ function dbSave(key, data){
 }
 
 async function initDB(){
+  await _authReady;
   await Promise.all([
     dbLoad('products', null),
     dbLoad('customers', []),
@@ -419,13 +426,17 @@ async function loadMyOrders(user){
   localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
 
   // 即時監聽此門市的訂單文件
-  ref.onSnapshot(snap=>{
+  const listen=()=>ref.onSnapshot(snap=>{
     if(!snap.exists||!snap.data().data) return;
     _CACHE.orders=snap.data().data;
     localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
     checkUnsyncedOrders();
     if(document.getElementById('screen-orders')?.classList.contains('active')) renderMyOrders();
+  }, err=>{
+    console.warn('訂單監聽中斷，5 秒後重試:',err);
+    setTimeout(listen,5000);
   });
+  listen();
 
   checkUnsyncedOrders();
   renderMyOrders();
