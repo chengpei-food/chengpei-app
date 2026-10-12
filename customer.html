@@ -175,6 +175,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 </style>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
@@ -345,11 +346,13 @@ try {
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
     // 等匿名登入完成才開始讀寫，避免監聽在登入前啟動被拒絕而默默失效
-    _authReady = new Promise(res=>{
-      const t=setTimeout(res,8000);
-      firebase.auth().onAuthStateChanged(u=>{ if(u){ clearTimeout(t); res(); } });
-    });
-    firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e));
+    if(typeof firebase.auth==='function'){
+      // 登入成功或失敗都繼續，最多等 5 秒，不會卡住
+      _authReady = Promise.race([
+        firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e)),
+        new Promise(r=>setTimeout(r,5000))
+      ]);
+    } else console.warn('Firebase Auth 模組未載入');
   }
 } catch(e){ console.warn('Firebase 初始化失敗，使用本機儲存', e); }
 
