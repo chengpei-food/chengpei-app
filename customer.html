@@ -760,13 +760,17 @@ async function submitOrder(){
   if(warn) warn.style.display=firestoreOk?'none':'block';
 }
 
-function resetOrder(){
-  cart={};
-  if(currentUser) localStorage.removeItem('cp_cart_'+currentUser.id);
-  syncAll();renderProducts();
+// 把結帳頁從「送出成功」畫面恢復成表單（不動購物車）
+function restoreOrderForm(){
+  const sc=document.getElementById('successCard');
+  if(!sc||!sc.classList.contains('show')) return;
   document.getElementById('orderForm').style.display='block';
-  document.getElementById('successCard').classList.remove('show');
+  sc.classList.remove('show');
   ['custAddress','delivDate','custNote'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+}
+function resetOrder(){
+  // 購物車在送出時就已清空；這裡不再清空，避免誤刪客戶新加入的品項
+  restoreOrderForm();
   goTab('catalog');
 }
 
@@ -1009,6 +1013,8 @@ function syncAll(){
 }
 
 function goTab(tab){
+  // 離開結帳頁、或購物車有新品項時，把上一張的「送出成功」畫面收起來
+  if(tab!=='checkout'||Object.keys(cart).length) restoreOrderForm();
   ['catalog','cart','checkout','stock','orders'].forEach(t=>{
     document.getElementById('screen-'+t).classList.toggle('active',t===tab);
     const tabEl=document.getElementById('tab-'+t);
