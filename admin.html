@@ -644,6 +644,8 @@ function getAdminPw(){ return (_CACHE.config||{}).adminPw || localStorage.getIte
 function getLimitedPw(){ return (_CACHE.config||{}).limitedAdminPw || localStorage.getItem('cp_admin_limited_pw') || DEFAULT_LIMITED_PW; }
 function getAdminRole(){ return sessionStorage.getItem('cp_admin_role')||'super'; }
 function isLimited(){ return getAdminRole()==='limited'; }
+// 把文字中的 HTML 特殊符號轉成純文字顯示，防止備註被塞入程式碼
+function escHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function getOrders(){ return _CACHE.orders || JSON.parse(localStorage.getItem('cp_orders')||'[]'); }
 function saveOrders(d){
   _CACHE.orders=d;
@@ -752,7 +754,7 @@ function renderDashboard(){
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
-      ${o.note?`<div class="oc-note">📝 ${o.note}</div>`:''}
+      ${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
     </div>`).join(''):'<div class="empty-state">尚無訂單</div>'}`;
 }
@@ -823,7 +825,7 @@ function renderOrders(){
     <div class="oc-contact">📞 ${o.customerPhone}</div>
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
-    ${o.note?`<div class="oc-note">📝 ${o.note}</div>`:''}
+    ${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
     <div class="oc-items">${o.items.map(i=>`${i.name}`+(i.code?` <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>`:'')+` × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
