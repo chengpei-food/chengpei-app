@@ -444,6 +444,15 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button class="save-settings-btn" onclick="saveOrderTime()">儲存時段設定</button>
       <div id="orderTimeMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
+      <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">颱風應變</div>
+      <div class="settings-card">
+        <div class="settings-field">
+          <div class="settings-label">開啟後，所有門市不受叫貨日與公司休假日限制，每天都能下單（下單時段仍然有效）</div>
+          <div id="typhoonStatus" style="margin-top:8px;font-size:0.92rem;font-weight:700;"></div>
+        </div>
+      </div>
+      <button class="save-settings-btn" id="typhoonBtn" onclick="toggleTyphoon()">🌀 開啟颱風模式</button>
+
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">雲端資料庫</div>
       <button class="save-settings-btn" onclick="syncLocalToCloud()" id="syncCloudBtn">☁️ 同步本機資料到雲端</button>
       <div id="syncCloudMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
@@ -754,7 +763,7 @@ function renderDashboard(){
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
-      ${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+      ${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
     </div>`).join(''):'<div class="empty-state">尚無訂單</div>'}`;
 }
@@ -825,7 +834,7 @@ function renderOrders(){
     <div class="oc-contact">📞 ${o.customerPhone}</div>
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
-    ${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+    ${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
     <div class="oc-items">${o.items.map(i=>`${i.name}`+(i.code?` <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>`:'')+` × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
@@ -893,13 +902,23 @@ function parseLogisticsForDow(logisticsStr, dow){
   const dayMap={'日':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6};
   // 切割空白，處理 "週三：丁穎揚" 或 "週一/五：林孟毅" 格式
   const parts=logisticsStr.split(/\s+/);
+  let other='';           // 「其他：名字」指定的預設司機
+  const dayCount={};      // 每位司機負責幾天，用來決定預設司機
+  const order=[];
   for(const part of parts){
-    const m=part.match(/^週([日一二三四五六\/]+)：(.+)$/);
+    const o=part.match(/^其他[：:](.+)$/);
+    if(o){ other=o[1]; continue; }
+    const m=part.match(/^週([日一二三四五六\/]+)[：:](.+)$/);
     if(!m) continue;
     const days=m[1].split('/').map(d=>dayMap[d]).filter(d=>d!==undefined);
     if(days.includes(dow)) return m[2];
+    if(!(m[2] in dayCount)){ dayCount[m[2]]=0; order.push(m[2]); }
+    dayCount[m[2]]+=days.length;
   }
-  return logisticsStr; // 找不到對應星期，回傳原始字串
+  // 沒對應到的日子（例如颱風天）：優先用「其他：」，否則用負責最多天的司機
+  if(other) return other;
+  if(order.length) return order.reduce((a,b)=>dayCount[b]>dayCount[a]?b:a);
+  return logisticsStr;
 }
 
 /* ── Excel Export（Template 格式） ── */
@@ -954,7 +973,7 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
     const cust=custMap[o.customerId]||custByAccount[o.customerAccount]||custByCompany[o.customerCompany]||{};
     const custCode=cust.account||o.customerAccount||o.customerId||'';
     const custName=o.customerCompany||o.customerName||'';
-    const logistics=(cust.logisticsByDay&&_delivDow!==null&&cust.logisticsByDay[String(_delivDow)])||(_delivDow!==null?parseLogisticsForDow(cust.logistics||'',_delivDow):cust.logistics||'');
+    const logistics=o.pickup?'自取':((cust.logisticsByDay&&_delivDow!==null&&cust.logisticsByDay[String(_delivDow)])||(_delivDow!==null?parseLogisticsForDow(cust.logistics||'',_delivDow):cust.logistics||''));
     const contact=cust.name||'';
     const note=o.note||'';
 
@@ -1709,7 +1728,7 @@ function goTab(tab){
   }
   if(tab==='products') renderProducts();
   if(tab==='customers') renderCustomers();
-  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); }
+  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); loadTyphoon(); }
 }
 
 let _annSavedSel=null;
@@ -1763,6 +1782,38 @@ function loadOrderTime(){
   const to=localStorage.getItem('cp_order_time_to')||'12:30';
   document.getElementById('orderTimeFrom').value=from;
   document.getElementById('orderTimeTo').value=to;
+}
+/* ── 颱風模式 ── */
+function renderTyphoon(on){
+  const st=document.getElementById('typhoonStatus'), btn=document.getElementById('typhoonBtn');
+  if(!st||!btn) return;
+  st.textContent=on?'🌀 目前：颱風模式「開啟中」— 所有門市每天都能下單':'目前：關閉（依各門市叫貨日）';
+  st.style.color=on?'#e53935':'var(--text2)';
+  btn.textContent=on?'✅ 關閉颱風模式，恢復正常叫貨日':'🌀 開啟颱風模式';
+  btn.style.background=on?'var(--teal)':'#e53935';
+}
+async function loadTyphoon(){
+  let on=!!(_CACHE.config||{}).typhoonMode;
+  renderTyphoon(on);
+  if(!db) return;
+  try{
+    const s=await db.collection('cp_data').doc('config').get();
+    on=!!((s.exists&&s.data().data)||{}).typhoonMode;
+    if(!_CACHE.config) _CACHE.config={};
+    _CACHE.config.typhoonMode=on;
+    renderTyphoon(on);
+  }catch(e){ console.warn('讀取颱風模式失敗:',e); }
+}
+async function toggleTyphoon(){
+  const on=!(_CACHE.config||{}).typhoonMode;
+  if(!confirm(on?'確定開啟颱風模式？\n所有門市將不受叫貨日限制，每天都能下單。':'確定關閉颱風模式？\n恢復各門市原本的叫貨日。')) return;
+  if(!db) return alert('目前無法連線雲端，請稍後再試');
+  try{
+    await db.collection('cp_data').doc('config').set({data:{typhoonMode:on}},{merge:true});
+    if(!_CACHE.config) _CACHE.config={};
+    _CACHE.config.typhoonMode=on;
+    renderTyphoon(on);
+  }catch(e){ alert('儲存失敗，請重新整理後再試'); console.warn(e); }
 }
 function saveOrderTime(){
   const from=document.getElementById('orderTimeFrom').value;
