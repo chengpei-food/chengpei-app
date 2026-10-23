@@ -444,6 +444,21 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button class="save-settings-btn" onclick="saveOrderTime()">儲存時段設定</button>
       <div id="orderTimeMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
+      <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">自取下單時段</div>
+      <div class="settings-card">
+        <div class="settings-field">
+          <div class="settings-label">客戶勾選「我要自取」時的下單時間（不受叫貨日限制）</div>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:0.9rem;cursor:pointer;"><input type="checkbox" id="pickupNoLimit" onchange="togglePickupNoLimit()" style="accent-color:#007787;width:16px;height:16px;"> 不限時間（全天都可下單）</label>
+          <div id="pickupTimeRow" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <input type="time" id="pickupTimeFrom" value="06:00" style="padding:7px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.95rem;color:var(--text);background:#fff;outline:none;">
+            <span style="color:var(--text2);font-size:0.88rem;">～</span>
+            <input type="time" id="pickupTimeTo" value="13:30" style="padding:7px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.95rem;color:var(--text);background:#fff;outline:none;">
+          </div>
+        </div>
+      </div>
+      <button class="save-settings-btn" onclick="savePickupTime()">儲存自取時段</button>
+      <div id="pickupTimeMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
+
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">颱風應變</div>
       <div class="settings-card">
         <div class="settings-field">
@@ -763,7 +778,7 @@ function renderDashboard(){
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
-      ${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+      ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
     </div>`).join(''):'<div class="empty-state">尚無訂單</div>'}`;
 }
@@ -834,7 +849,7 @@ function renderOrders(){
     <div class="oc-contact">📞 ${o.customerPhone}</div>
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
-    ${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+    ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
     <div class="oc-items">${o.items.map(i=>`${i.name}`+(i.code?` <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>`:'')+` × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
@@ -966,8 +981,9 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
 
   // 每張訂單的每個品項輸出一列
   orders.forEach(o=>{
-    const _od=o.createdAt?new Date(o.createdAt.slice(0,10)):null;
-    if(_od){ const _dow=_od.getDay(); _od.setDate(_od.getDate()+(_dow===5?3:1)); }
+    let _od=null;
+    if(o.deliveryDate){ _od=new Date(o.deliveryDate+'T00:00:00'); }  // 客戶選的到貨日期
+    else if(o.createdAt){ _od=new Date(o.createdAt.slice(0,10)+'T00:00:00'); const _dow=_od.getDay(); _od.setDate(_od.getDate()+(_dow===5?3:1)); }
     const dateStr=_od?`${_od.getFullYear()}/${String(_od.getMonth()+1).padStart(2,'0')}/${String(_od.getDate()).padStart(2,'0')}`:'';;;
     const _delivDow=_od?_od.getDay():null;
     const cust=custMap[o.customerId]||custByAccount[o.customerAccount]||custByCompany[o.customerCompany]||{};
@@ -1728,7 +1744,7 @@ function goTab(tab){
   }
   if(tab==='products') renderProducts();
   if(tab==='customers') renderCustomers();
-  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); loadTyphoon(); }
+  if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); loadTyphoon(); loadPickupTime(); }
 }
 
 let _annSavedSel=null;
@@ -1783,6 +1799,38 @@ function loadOrderTime(){
   document.getElementById('orderTimeFrom').value=from;
   document.getElementById('orderTimeTo').value=to;
 }
+/* ── 自取下單時段 ── */
+function togglePickupNoLimit(){
+  const off=document.getElementById('pickupNoLimit').checked;
+  const row=document.getElementById('pickupTimeRow');
+  row.style.opacity=off?'0.35':'1'; row.style.pointerEvents=off?'none':'auto';
+}
+async function loadPickupTime(){
+  let c=_CACHE.config||{};
+  if(db){ try{ const sn=await db.collection('cp_data').doc('config').get(); c=(sn.exists&&sn.data().data)||{}; _CACHE.config={...(_CACHE.config||{}),...c}; }catch(e){} }
+  const from=c.pickupTimeFrom||'', to=c.pickupTimeTo||'';
+  document.getElementById('pickupNoLimit').checked=!from&&!to;
+  if(from) document.getElementById('pickupTimeFrom').value=from;
+  if(to) document.getElementById('pickupTimeTo').value=to;
+  togglePickupNoLimit();
+}
+async function savePickupTime(){
+  const noLimit=document.getElementById('pickupNoLimit').checked;
+  const from=noLimit?'':document.getElementById('pickupTimeFrom').value;
+  const to=noLimit?'':document.getElementById('pickupTimeTo').value;
+  if(!noLimit&&(!from||!to)) return alert('請填寫開始與結束時間');
+  if(!noLimit&&from>to) return alert('開始時間不能晚於結束時間');
+  const msg=document.getElementById('pickupTimeMsg');
+  if(!db) return alert('目前無法連線雲端，請稍後再試');
+  try{
+    await db.collection('cp_data').doc('config').set({data:{pickupTimeFrom:from,pickupTimeTo:to}},{merge:true});
+    if(!_CACHE.config) _CACHE.config={};
+    _CACHE.config.pickupTimeFrom=from; _CACHE.config.pickupTimeTo=to;
+    msg.style.color='var(--teal)'; msg.textContent=noLimit?'✓ 已儲存：自取不限時間':'✓ 已儲存：自取 '+from+' ～ '+to;
+  }catch(e){ msg.style.color='#e53935'; msg.textContent='儲存失敗，請重新整理後再試'; }
+  msg.style.display='block'; setTimeout(()=>{msg.style.display='none';},3000);
+}
+
 /* ── 颱風模式 ── */
 function renderTyphoon(on){
   const st=document.getElementById('typhoonStatus'), btn=document.getElementById('typhoonBtn');
@@ -1824,7 +1872,8 @@ function saveOrderTime(){
   if(!_CACHE.config) _CACHE.config={};
   _CACHE.config.orderTimeFrom=from;
   _CACHE.config.orderTimeTo=to;
-  dbSave('config',_CACHE.config);
+  localStorage.setItem('cp_config',JSON.stringify(_CACHE.config));
+  if(db) db.collection('cp_data').doc('config').set({data:{orderTimeFrom:from,orderTimeTo:to}},{merge:true}).catch(e=>console.warn('時段儲存失敗:',e));
   const msg=document.getElementById('orderTimeMsg');
   msg.style.color='var(--teal)';msg.textContent='✓ 時段設定已儲存';msg.style.display='block';
   setTimeout(()=>{msg.style.display='none';},3000);

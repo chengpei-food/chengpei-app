@@ -253,7 +253,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
         <span>合計金額</span><span id="cartTotal">$0</span>
       </div>
       <label id="pickupRow" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;margin-bottom:10px;border:1.5px solid #ccc;border-radius:8px;background:#fff;font-size:0.9rem;font-weight:700;color:#1C2B2D;cursor:pointer;">
-        <input type="checkbox" id="pickupChk" onchange="setPickup(this.checked)" style="width:18px;height:18px;accent-color:#007787;"> 🚗 我要自取（不限叫貨日，可下單到 13:30）
+        <input type="checkbox" id="pickupChk" onchange="setPickup(this.checked)" style="width:18px;height:18px;accent-color:#007787;"> 🚗 我要自取（不限叫貨日<span id="pickupTimeHint">與下單時間</span>）
       </label>
       <div id="orderDayNotice" style="display:none;background:#FEF3DC;border:1.5px solid #F5A200;border-radius:8px;padding:8px 12px;font-size:0.8rem;color:#c47f00;text-align:center;margin-bottom:10px;">📅 今天不是叫貨日，無法送出訂單</div>
       <button class="go-btn" id="checkoutBtn" onclick="goTab('checkout')" disabled>去結帳 →</button>
@@ -279,6 +279,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
           <div class="sec-label">訂單明細</div>
           <div class="summary-card" id="summaryCard"></div>
           <div class="form-card" style="margin-top:12px">
+            <div class="form-field"><div class="form-label">到貨日期</div><select id="delivDateSel" style="width:100%;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:0.95rem;background:#fff;color:#1C2B2D;"></select></div>
             <div class="form-field"><div class="form-label">備註</div><textarea id="custNote" rows="3" placeholder="其他備註事項…"></textarea></div>
           </div>
           <div class="submit-wrap"><button class="submit-btn" onclick="submitOrder()">✅ 確認送出訂單</button></div>
@@ -623,12 +624,18 @@ function addToCart(code){
 function getCompanyClosedDays(){
   try{return JSON.parse(localStorage.getItem('cp_closed_days')||'[]');}catch(e){return[];}
 }
-const PICKUP_TIME_TO='13:30'; // 自取可下單到這個時間
-function getOrderTimeTo(){
-  const to=localStorage.getItem('cp_order_time_to')||'12:30';
-  return (typeof pickupMode!=='undefined'&&pickupMode&&PICKUP_TIME_TO>to)?PICKUP_TIME_TO:to;
+function getOrderTimeTo(){ return localStorage.getItem('cp_order_time_to')||'12:30'; }
+// 自取下單時段（後台設定；兩個都空白＝不限時間）
+function getPickupTime(){ const c=_CACHE.config||{}; return {from:c.pickupTimeFrom||'',to:c.pickupTimeTo||''}; }
+function isPickupTimeOk(){
+  const {from,to}=getPickupTime();
+  if(!from&&!to) return true;
+  const now=twNow();
+  const cur=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  return cur>=(from||'00:00') && cur<=(to||'23:59');
 }
 function isOrderTimeOk(){
+  if(typeof pickupMode!=='undefined'&&pickupMode) return isPickupTimeOk();
   const from=localStorage.getItem('cp_order_time_from')||'06:00';
   const to=getOrderTimeTo();
   const now=twNow();
@@ -636,6 +643,10 @@ function isOrderTimeOk(){
   return cur>=from && cur<=to;
 }
 function getOrderTimeText(){
+  if(typeof pickupMode!=='undefined'&&pickupMode){
+    const {from,to}=getPickupTime();
+    return `自取下單時間：${from||'00:00'} ～ ${to||'23:59'}`;
+  }
   const from=localStorage.getItem('cp_order_time_from')||'06:00';
   const to=getOrderTimeTo();
   return `下單時間：${from} ～ ${to}`;
@@ -681,6 +692,8 @@ function renderCart(){
     document.getElementById('orderDayNotice').style.display='none';
     return;
   }
+  const _ph=document.getElementById('pickupTimeHint');
+  if(_ph){ const {from,to}=getPickupTime(); _ph.textContent=(!from&&!to)?'與下單時間':'，可下單 '+(from||'00:00')+'～'+(to||'23:59'); }
   const dayOk=pickupMode||isOrderDayOk();
   const timeOk=isOrderTimeOk();
   const noticeEl=document.getElementById('orderDayNotice');
@@ -715,12 +728,43 @@ function cartSet(code,v){v=parseInt(v)||0;const p=getProducts().find(x=>x.code==
 /* ════════════════════════════
    CHECKOUT
 ════════════════════════════ */
+/* ── 到貨日期 ── */
+const _DOW=['日','一','二','三','四','五','六'];
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function delivLabel(s){ if(!s) return ''; const d=new Date(s+'T00:00:00'); return (d.getMonth()+1)+'/'+d.getDate()+'（週'+_DOW[d.getDay()]+'）'; }
+// 依叫貨日推算該店的送貨日（叫貨隔天，週五～週日叫貨為週一送）
+function getDelivDows(){
+  const od=currentUser&&currentUser.orderDays;
+  if(!od||!od.length) return [1,2,3,4,5];
+  return [...new Set(od.map(d=>(d>=5||d===0)?1:d+1))];
+}
+function defaultDelivDate(){
+  const d=twNow(); d.setHours(0,0,0,0);
+  const w=d.getDay(); d.setDate(d.getDate()+(w===5?3:w===6?2:1));
+  return d;
+}
+function getDelivOptions(){
+  const dows=getDelivDows(), start=defaultDelivDate(), out=[];
+  for(let i=0;i<14;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    // 颱風模式／自取時，最近一天一定可選
+    if(dows.includes(d.getDay())||(i===0&&(pickupMode||isTyphoonMode()))) out.push(ymd(d));
+  }
+  return out;
+}
+function renderDelivSelect(){
+  const sel=document.getElementById('delivDateSel'); if(!sel) return;
+  const cur=sel.value, opts=getDelivOptions();
+  sel.innerHTML=opts.map(v=>`<option value="${v}">${delivLabel(v)}</option>`).join('');
+  sel.value=opts.includes(cur)?cur:(opts[0]||'');
+}
 function renderCheckout(){
   const items=Object.values(cart);
   const empty=document.getElementById('orderEmptyHint');
   const inner=document.getElementById('orderInner');
   if(!items.length){empty.style.display='block';inner.style.display='none';return;}
   empty.style.display='none';inner.style.display='block';
+  renderDelivSelect();
   const showP=currentUser&&currentUser.showPrice;
   const total=showP ? items.reduce((s,i)=>s+i.price*i.qty,0) : 0;
   document.getElementById('summaryCard').innerHTML=
@@ -747,6 +791,9 @@ async function submitOrder(){
   };
   const isPickup=pickupMode;
   if(isPickup) order.pickup=true;
+  const deliveryDate=document.getElementById('delivDateSel')?.value||'';
+  if(!deliveryDate){ alert('請選擇到貨日期'); return; }
+  order.deliveryDate=deliveryDate;
 
   // 先存到 localStorage（備份）
   const orders=getOrders();orders.push(order);
@@ -779,7 +826,7 @@ async function submitOrder(){
   const sc=document.getElementById('successCard');sc.classList.add('show');
   document.getElementById('successNo').textContent='訂單編號：'+no;
   const _showP=currentUser&&currentUser.showPrice;
-  document.getElementById('successDetail').innerHTML=`訂購人：${currentUser.name}${currentUser.company?'（'+currentUser.company+'）':''}<br>共 ${items.length} 種品項${_showP?'，合計 '+fmt(total):''}<br>${isPickup?'<b>🚗 取貨方式：自取</b><br>':''}${dt?'希望到貨：'+dt+'<br>':''}我們將盡快與您聯繫確認。`;
+  document.getElementById('successDetail').innerHTML=`訂購人：${currentUser.name}${currentUser.company?'（'+currentUser.company+'）':''}<br>共 ${items.length} 種品項${_showP?'，合計 '+fmt(total):''}<br>${isPickup?'<b>🚗 取貨方式：自取</b><br>':''}${'📦 '+(isPickup?'取貨':'到貨')+'日期：'+delivLabel(deliveryDate)+'<br>'}我們將盡快與您聯繫確認。`;
 
   // 若 Firestore 失敗，顯示警告
   const warn=document.getElementById('orderSyncWarning');
@@ -827,7 +874,7 @@ function renderMyOrders(){
     const totalHtml=showP?`<div style="margin-top:8px;text-align:right;font-size:0.88rem;font-weight:800;color:var(--teal);">合計 ${fmt(o.total)}</div>`:'';
     return `<div class="order-card" onclick="toggleOrderDetail('${o.id}')" style="cursor:pointer;">
       <div class="order-card-head">
-        <div><div class="order-no">${o.id}</div><div class="order-date">${o.createdAt.slice(0,10)}${o.pickup?' · 🚗 自取':''}</div></div>
+        <div><div class="order-no">${o.id}</div><div class="order-date">${o.createdAt.slice(0,10)}${o.deliveryDate?' · '+(o.pickup?'取貨':'到貨')+' '+delivLabel(o.deliveryDate):''}${o.pickup?' · 🚗 自取':''}</div></div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="order-status ${STATUS_CLASS[o.status]||'status-pending'}">${STATUS_LABEL[o.status]||o.status}</span>
           <span id="orderArrow-${o.id}" style="font-size:0.8rem;color:var(--text3);">▼</span>
