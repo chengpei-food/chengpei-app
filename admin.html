@@ -967,8 +967,24 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
     ? (storeId?'此店家今天沒有待確認的訂單':'今天沒有待確認的訂單（已確認的訂單不會重複匯出）')
     : (storeId?'此店家在選定範圍內沒有訂單':'目前沒有訂單'));
 
-  // 依下單時間排序
-  const orders=[...filtered].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+  // 送貨日期：客戶有選就用客戶選的，否則為下單隔天（週五下單→週一）
+  const delivOf=o=>{
+    if(o.deliveryDate) return o.deliveryDate;
+    if(!o.createdAt) return '';
+    const d=new Date(o.createdAt.slice(0,10)+'T00:00:00'); d.setDate(d.getDate()+(d.getDay()===5?3:1));
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  };
+  const storeOf=o=>String(o.customerAccount||o.customerId||o.customerCompany||o.customerName||'');
+  const groupOf=o=>delivOf(o)+'|'+storeOf(o);
+  // 每組（同送貨日＋同店家）最早的下單時間，用來決定店家先後
+  const firstTime={};
+  filtered.forEach(o=>{ const g=groupOf(o); if(!firstTime[g]||o.createdAt<firstTime[g]) firstTime[g]=o.createdAt; });
+  // 排序：送貨日期 → 店家（依當天最早下單時間）→ 下單時間
+  const orders=[...filtered].sort((a,b)=>
+    delivOf(a).localeCompare(delivOf(b)) ||
+    firstTime[groupOf(a)].localeCompare(firstTime[groupOf(b)]) ||
+    groupOf(a).localeCompare(groupOf(b)) ||
+    a.createdAt.localeCompare(b.createdAt));
 
   // 建立客戶查找表（ID + 帳號 + 公司名備援）
   const custMap={}, custByAccount={}, custByCompany={};
@@ -979,7 +995,7 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
   });
 
   // 日期範圍
-  const dates=orders.map(o=>o.createdAt.slice(0,10));
+  const dates=orders.map(o=>o.createdAt.slice(0,10)).sort();
   const minDate=dates[0], maxDate=dates[dates.length-1];
 
   // 標題列（對應 Template 的 18 欄）
@@ -1007,8 +1023,8 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
     const contact=cust.name||'';
     const note=o.note||'';
 
-    // 同一客戶用同一序號，換客戶才遞增
-    const custKey=custCode||custName;
+    // 同一送貨日＋同一店家的所有訂單用同一個序號
+    const custKey=groupOf(o);
     if(custKey!==lastCustKey){ rowSeq++; lastCustKey=custKey; }
 
     (o.items||[]).forEach(item=>{
