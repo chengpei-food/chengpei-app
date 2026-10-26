@@ -106,6 +106,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .oc-total{font-weight:800;font-size:1rem;color:var(--yellow);}
 .oc-addr{font-size:0.73rem;color:var(--text3);margin-bottom:6px;}
 .oc-note{font-size:0.73rem;color:var(--text3);margin-bottom:8px;}
+.note-box{margin:6px 0 8px;padding:7px 10px;background:#FFF4D6;border-left:4px solid #F5A200;border-radius:6px;font-size:0.86rem;font-weight:700;color:#7a4b00;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
 .status-select{background:var(--admin-bg);color:var(--text);border:1.5px solid var(--admin-border);border-radius:8px;padding:6px 10px;font-size:0.82rem;font-family:inherit;cursor:pointer;outline:none;}
 .status-select:focus{border-color:var(--teal-light);}
 .export-btn{background:var(--yellow);color:#FFFFFF;border:none;border-radius:8px;padding:8px 16px;font-size:0.82rem;font-weight:800;cursor:pointer;flex-shrink:0;}
@@ -232,6 +233,7 @@ input:checked + .slider:before{transform:translateX(20px);}
         <button class="export-btn" onclick="exportExcel('today')" style="background:var(--teal);">📥 今天</button>
         <button class="export-btn" onclick="exportExcel('all')">📥 全部</button>
         <button class="export-btn" onclick="openExportByStore()" style="background:#9c6700;">🏪 選店家</button>
+        <button class="export-btn" onclick="openItemStats()" style="background:#5b6bbf;">🔎 品項查詢</button>
       </div>
     </div>
     <!-- 批次狀態列 -->
@@ -763,7 +765,7 @@ function renderDashboard(){
   const todayStr=twDateStr();
   const todayOrders=orders.filter(o=>o.createdAt.slice(0,10)===todayStr);
   const totalRevenue=orders.filter(o=>o.status==='done').reduce((s,o)=>s+o.total,0);
-  const recent=orders.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,5);
+  const recent=todayOrders.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)); // 今天所有訂單
   const dot=document.getElementById('pendingDot');
   dot.textContent=pending; dot.classList.toggle('show',pending>0);
   document.getElementById('dashBody').innerHTML=`
@@ -773,14 +775,14 @@ function renderDashboard(){
       <div class="stat-card"><div class="stat-value">${orders.length}</div><div class="stat-label">總訂單數</div></div>
       <div class="stat-card"><div class="stat-value">${customers.length}</div><div class="stat-label">客戶數</div></div>
     </div>
-    <div class="sec-title">最新訂單</div>
+    <div class="sec-title">今天的訂單（${recent.length} 張）</div>
     ${recent.length?recent.map(o=>`<div class="recent-order">
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
-      ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+      ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
-    </div>`).join(''):'<div class="empty-state">尚無訂單</div>'}`;
+    </div>`).join(''):'<div class="empty-state">今天還沒有訂單</div>'}`;
 }
 
 /* ── Orders ── */
@@ -799,15 +801,24 @@ function renderCustFilterBar(){
   // 從訂單中取出不重複的客戶
   const seen=new Set();
   const custs=[['all','全部客戶']];
-  allOrders.sort((a,b)=>a.customerCompany?.localeCompare(b.customerCompany||'')||0).forEach(o=>{
+  // 今天下單的訂單數（不論狀態），依門市統計
+  const todayStr=twDateStr();
+  const newCount={}; let newTotal=0;
+  allOrders.forEach(o=>{
+    if((o.createdAt||'').slice(0,10)===todayStr){
+      const k=o.customerCompany||o.customerName||''; newCount[k]=(newCount[k]||0)+1; newTotal++;
+    }
+  });
+  [...allOrders].sort((a,b)=>a.customerCompany?.localeCompare(b.customerCompany||'')||0).forEach(o=>{
     const key=o.customerCompany||o.customerName||'';
     if(key && !seen.has(key)){ seen.add(key); custs.push([key, key]); }
   });
-  document.getElementById('custFilterBar').innerHTML=custs.map(([v,l])=>`<span class="filter-chip${v===orderCustFilter?' active':''}" onclick="setCustFilter('${v.replace(/'/g,"\\'")}')">${l}</span>`).join('');
+  const badge=n=>n?` <span style="display:inline-block;min-width:18px;padding:0 5px;margin-left:3px;border-radius:9px;background:#e53935;color:#fff;font-size:0.68rem;font-weight:800;line-height:18px;text-align:center;">${n}</span>`:'';
+  document.getElementById('custFilterBar').innerHTML=custs.map(([v,l])=>`<span class="filter-chip${v===orderCustFilter?' active':''}" onclick="setCustFilter('${v.replace(/'/g,"\\'")}')">${escHtml(l)}${badge(v==='all'?newTotal:newCount[v])}</span>`).join('');
   const toggle=document.getElementById('custFilterToggle');
   const arrow=document.getElementById('custFilterArrow');
   if(toggle){
-    const label=orderCustFilter==='all'?'門市篩選':'門市：'+orderCustFilter;
+    const label=(orderCustFilter==='all'?'門市篩選':'門市：'+escHtml(orderCustFilter))+(newTotal?`（今天訂單 ${newTotal} 張）`:'');
     const expanded=document.getElementById('custFilterBar').classList.contains('expanded');
     toggle.innerHTML=label+' <span id="custFilterArrow">'+(expanded?'▴':'▾')+'</span>';
   }
@@ -849,7 +860,7 @@ function renderOrders(){
     <div class="oc-contact">📞 ${o.customerPhone}</div>
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
-    ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="oc-note">📝 ${escHtml(o.note)}</div>`:''}
+    ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}
     <div class="oc-items">${o.items.map(i=>`${i.name}`+(i.code?` <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>`:'')+` × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
@@ -944,14 +955,17 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
   const todayStr=twDateStr();
   let filtered;
   if(mode==='today'){
-    filtered=allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr);
+    // 今天的訂單只匯出「待確認」的，已確認（已匯出過）的不再重複匯出
+    filtered=allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)===todayStr&&o.status==='pending');
   } else if(mode==='range'&&dateFrom&&dateTo){
     filtered=allOrders.filter(o=>o.createdAt&&o.createdAt.slice(0,10)>=dateFrom&&o.createdAt.slice(0,10)<=dateTo);
   } else {
     filtered=allOrders;
   }
   if(storeId) filtered=filtered.filter(o=>(o.customerId===storeId||o.customerAccount===storeId));
-  if(!filtered.length) return alert(storeId?'此店家在選定範圍內沒有訂單':'今天目前沒有訂單');
+  if(!filtered.length) return alert(mode==='today'
+    ? (storeId?'此店家今天沒有待確認的訂單':'今天沒有待確認的訂單（已確認的訂單不會重複匯出）')
+    : (storeId?'此店家在選定範圍內沒有訂單':'目前沒有訂單'));
 
   // 依下單時間排序
   const orders=[...filtered].sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
@@ -1048,6 +1062,58 @@ function exportExcel(mode='all', storeId=null, dateFrom=null, dateTo=null){
     renderFilterBar();
     renderOrders();
   }
+}
+
+/* ── 品項查詢（依日期統計各品項由哪些店家叫貨） ── */
+const _itemOpen=new Set();
+function openItemStats(){
+  const d=document.getElementById('itemStatsDate');
+  if(!d.value) d.value=twDateStr();
+  document.getElementById('itemStatsSearch').value='';
+  document.getElementById('itemStatsModal').style.display='flex';
+  renderItemStats();
+}
+function closeItemStats(){ document.getElementById('itemStatsModal').style.display='none'; }
+function toggleItemRow(code){ _itemOpen.has(code)?_itemOpen.delete(code):_itemOpen.add(code); renderItemStats(); }
+function renderItemStats(){
+  const day=document.getElementById('itemStatsDate').value||twDateStr();
+  const q=document.getElementById('itemStatsSearch').value.trim().toLowerCase();
+  const orders=getOrders().filter(o=>(o.createdAt||'').slice(0,10)===day&&o.status!=='rejected');
+  const map={};
+  orders.forEach(o=>{
+    const store=o.customerCompany||o.customerName||'';
+    (o.items||[]).forEach(i=>{
+      const key=i.code||i.name;
+      if(!map[key]) map[key]={code:i.code||'',name:i.name||'',unit:i.unit||'',spec:i.spec||'',total:0,stores:{}};
+      const m=map[key]; m.total+=Number(i.qty)||0;
+      m.stores[store]=(m.stores[store]||0)+(Number(i.qty)||0);
+    });
+  });
+  let list=Object.values(map);
+  if(q) list=list.filter(m=>m.name.toLowerCase().includes(q)||m.code.toLowerCase().includes(q));
+  list.sort((a,b)=>a.code.localeCompare(b.code));
+  document.getElementById('itemStatsSummary').textContent=`${day}　共 ${orders.length} 張訂單、${list.length} 個品項${q?'（篩選中）':''}　點品項可展開店家`;
+  const el=document.getElementById('itemStatsList');
+  if(!list.length){ el.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;font-size:0.88rem;">'+(orders.length?'找不到符合的品項':'這天沒有訂單')+'</div>'; return; }
+  const autoOpen=q&&list.length<=5; // 搜尋結果少時自動展開
+  el.innerHTML=list.map(m=>{
+    const stores=Object.entries(m.stores).sort((a,b)=>a[0].localeCompare(b[0],'zh-TW'));
+    const open=autoOpen||_itemOpen.has(m.code||m.name);
+    const k=(m.code||m.name).replace(/'/g,"\\'");
+    return `<div style="border:1.5px solid #e6e6e6;border-radius:10px;margin-bottom:8px;overflow:hidden;">
+      <div onclick="toggleItemRow('${k}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;cursor:pointer;background:${open?'#eef0fa':'#fff'};">
+        <div style="min-width:0;">
+          <div style="font-size:0.9rem;font-weight:800;color:#1C2B2D;">${escHtml(m.name)}</div>
+          <div style="font-size:0.72rem;color:#888;">${escHtml(m.code)}${m.spec?' · '+escHtml(m.spec):''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:10px;">
+          <div style="font-size:0.95rem;font-weight:800;color:#5b6bbf;">共 ${m.total} ${escHtml(m.unit)}</div>
+          <div style="font-size:0.72rem;color:#888;">${stores.length} 間店 ${open?'▴':'▾'}</div>
+        </div>
+      </div>
+      ${open?`<div style="padding:4px 12px 8px;background:#fafbff;">${stores.map(([n,qty])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #e3e3e3;font-size:0.85rem;"><span>${escHtml(n)}</span><b>${qty} ${escHtml(m.unit)}</b></div>`).join('')}</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 /* ── Export by Store ── */
@@ -1971,6 +2037,22 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
       <button type="button" onclick="closeCustForm()" style="flex:1;padding:11px;border:1.5px solid #ccc;border-radius:10px;background:white;font-size:0.9rem;cursor:pointer;color:#333;font-weight:600;">取消</button>
       <button type="button" onclick="saveCust()" style="flex:1;padding:11px;background:#007787;color:white;border:none;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;">儲存</button>
     </div>
+  </div>
+</div>
+
+<!-- 品項查詢 Modal -->
+<div id="itemStatsModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:white;border-radius:16px;padding:18px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,0.25);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:0.95rem;font-weight:800;color:#5b6bbf;">🔎 品項查詢：哪些店家叫了這個品項</div>
+      <button onclick="closeItemStats()" style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:#888;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input type="date" id="itemStatsDate" onchange="renderItemStats()" style="padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.88rem;">
+      <input type="text" id="itemStatsSearch" oninput="renderItemStats()" placeholder="搜尋品名或編號…" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;">
+    </div>
+    <div id="itemStatsSummary" style="font-size:0.78rem;color:#666;margin-bottom:8px;"></div>
+    <div id="itemStatsList" style="overflow-y:auto;flex:1;"></div>
   </div>
 </div>
 
