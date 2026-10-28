@@ -234,8 +234,10 @@ input:checked + .slider:before{transform:translateX(20px);}
         <button class="export-btn" onclick="exportExcel('all')">📥 全部</button>
         <button class="export-btn" onclick="openExportByStore()" style="background:#9c6700;">🏪 選店家</button>
         <button class="export-btn" onclick="openItemStats()" style="background:#5b6bbf;">🔎 品項查詢</button>
+        <button class="export-btn" onclick="requestErpSend()" style="background:#2e7d32;">📤 送進ERP</button>
       </div>
     </div>
+    <div id="erpStatusBar" style="display:none;padding:6px 13px;font-size:0.76rem;background:#f1f8f1;border-bottom:1px solid var(--admin-border);color:#2e5d32;line-height:1.5;"></div>
     <!-- 批次狀態列 -->
     <div style="background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:8px 13px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
       <button onclick="batchAdvanceStatus('confirmed','shipping')" style="flex:1;padding:7px 10px;background:#E8F5E9;color:#2E7D32;border:1.5px solid #A5D6A7;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">已確認 → 出貨中</button>
@@ -620,7 +622,41 @@ async function initDB(){
     }).catch(e=>console.warn('遷移失敗:',e));
 
     startOrdersListener();
+    startErpStatusListener();
   }
+}
+
+/* ── ERP 送單（由公司電腦上的送單程式執行） ── */
+let _erpStatus=null;
+function startErpStatusListener(){
+  db.collection('cp_data').doc('erp_status').onSnapshot(snap=>{
+    _erpStatus=snap.exists?snap.data():null; renderErpStatus();
+  },err=>{ console.warn('ERP狀態監聽中斷:',err); setTimeout(startErpStatusListener,10000); });
+  setInterval(renderErpStatus,60000);
+}
+function renderErpStatus(){
+  const el=document.getElementById('erpStatusBar'); if(!el) return;
+  const st=_erpStatus; if(!st){ el.style.display='none'; return; }
+  const online=st.heartbeat&&(Date.now()-st.heartbeat<3*60*1000);
+  const mode=st.mode==='test'?'（測試模式）':'';
+  let html=(online?'🟢 送單電腦在線':'🔴 送單電腦離線（請確認公司筆電已開機、送單程式有在執行）')+mode;
+  if(st.running) html+='　⏳ 送單中…';
+  else if(st.finishedAt) html+=`　上次送單 ${escHtml(st.finishedAt.slice(5,16))}：${st.ok?'✅':'⚠️'} ${escHtml(st.message||'')}`;
+  const issues=[...(st.failed||[]),...(st.skipped||[])];
+  if(!st.running&&issues.length) html+='<br>'+issues.map(x=>`・${escHtml(x.store)} ${escHtml(x.deliv||'')}：${escHtml(x.reason)}`).join('<br>');
+  el.innerHTML=html; el.style.display='block';
+  el.style.background=online?(st.ok===false?'#fff4e5':'#f1f8f1'):'#fdecea';
+}
+async function requestErpSend(){
+  if(!db) return alert('目前無法連線雲端');
+  const st=_erpStatus;
+  if(!st||!st.heartbeat||Date.now()-st.heartbeat>3*60*1000){
+    if(!confirm('送單電腦目前看起來是離線的，按下去要等它開機後才會送。\n仍要送出請求嗎？')) return;
+  } else if(!confirm('確定要把還沒送過的訂單送進 ERP 嗎？\n（已送過的不會重複送）')) return;
+  try{
+    await db.collection('cp_data').doc('erp_request').set({requestedAt:Date.now(),by:getAdminRole()});
+    alert('已送出請求，送單電腦收到後就會開始送，結果會顯示在上方綠色狀態列。');
+  }catch(e){ alert('送出請求失敗，請重新整理後再試'); }
 }
 
 /* ── 訂單即時監聽（斷線自動重連） ── */
@@ -780,7 +816,7 @@ function renderDashboard(){
       <div class="ro-head"><span class="ro-no">${o.id}</span><span class="status-badge ${STATUS_CLASS[o.status]||'s-pending'}">${STATUS_LABEL[o.status]||o.status}</span></div>
       <div class="ro-name">${o.customerName}${o.customerCompany?' ('+o.customerCompany+')':''}</div>
       <div class="ro-preview">${o.items.slice(0,2).map(i=>i.name+'×'+i.qty).join('、')}${o.items.length>2?'…':''}</div>
-      ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}
+      ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}${o.erpSent?`<div class="oc-note" style="color:#2e7d32;font-weight:800;">📤 已送ERP：${escHtml(o.erpSlipNo||'')}</div>`:''}
       <div class="ro-foot"><span class="ro-time">${o.createdAt.slice(0,16).replace('T',' ')}</span><span class="ro-total">${fmt(o.total)}</span></div>
     </div>`).join(''):'<div class="empty-state">今天還沒有訂單</div>'}`;
 }
@@ -860,7 +896,7 @@ function renderOrders(){
     <div class="oc-contact">📞 ${o.customerPhone}</div>
     ${o.address?`<div class="oc-addr">📍 ${o.address}</div>`:''}
     ${o.deliveryDate?`<div class="oc-addr">📅 希望到貨：${o.deliveryDate}</div>`:''}
-    ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}
+    ${o.deliveryDate?`<div class="oc-note" style="color:var(--teal);font-weight:800;">📦 ${o.pickup?'取貨':'到貨'}：${(()=>{const d=new Date(o.deliveryDate+'T00:00:00');return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）';})()}</div>`:''}${o.pickup?`<div class="oc-note" style="color:#9c6700;font-weight:800;">🚗 自取</div>`:''}${o.note?`<div class="note-box">📝 備註：${escHtml(o.note)}</div>`:''}${o.erpSent?`<div class="oc-note" style="color:#2e7d32;font-weight:800;">📤 已送ERP：${escHtml(o.erpSlipNo||'')}</div>`:''}
     <div class="oc-items">${o.items.map(i=>`${i.name}`+(i.code?` <span style="color:var(--text3);font-size:0.72rem;">[${i.code}]</span>`:'')+` × ${i.qty} ${i.unit}  ${fmt(i.price*i.qty)}`).join('<br>')}</div>
     <div class="oc-foot">
       <span class="oc-total">${fmt(o.total)}</span>
