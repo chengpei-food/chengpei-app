@@ -332,7 +332,6 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
   <div class="tab" id="tab-catalog" onclick="goTab('catalog')"><span class="tab-label">商品</span></div>
   <div class="tab" id="tab-cart" onclick="goTab('cart')"><span class="tab-label">購物車</span><span class="tab-dot" id="tabDot">0</span></div>
   <div class="tab" id="tab-checkout" onclick="goTab('checkout')"><span class="tab-label">結帳</span></div>
-  <div class="tab" id="tab-stock" onclick="goTab('stock')"><span class="tab-label">庫存</span></div>
   <div class="tab" id="tab-orders" onclick="goTab('orders')"><span class="tab-label">訂單</span></div>
 </div>
 
@@ -487,7 +486,6 @@ function loginSuccess(user) {
   document.getElementById('headerUser').textContent = user.company || user.name;
   hideErr();
   loadMyOrders(user);
-  loadMyStock(user);
   initApp();
   initFCM('customer', user.account||'');
   goTab('catalog');
