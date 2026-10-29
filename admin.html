@@ -679,10 +679,11 @@ function startOrdersListener(){
     cacheOrdersLocal(allOrders);
     showSyncWarn(false);
     if(sessionStorage.getItem('cp_admin')==='1'){
-      updatePendingDot?.();
-      const active=document.querySelector('.tab.active')?.id;
-      if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
-      else if(active==='tab-dashboard') renderDashboard();
+      try{
+        const active=document.querySelector('.tab.active')?.id;
+        if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
+        else if(active==='tab-dashboard') renderDashboard();
+      }catch(e){ console.warn('畫面更新失敗:',e); }
     }
   }, err=>{
     console.warn('訂單監聽中斷，5 秒後重試:',err);
