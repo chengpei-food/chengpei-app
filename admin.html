@@ -676,7 +676,7 @@ function startOrdersListener(){
     allOrders.forEach(o=>_knownOrderIds.add(o.id));
     _CACHE.orders=allOrders;
     _ordersLoaded=true;
-    localStorage.setItem('cp_orders',JSON.stringify(allOrders));
+    cacheOrdersLocal(allOrders);
     showSyncWarn(false);
     if(sessionStorage.getItem('cp_admin')==='1'){
       updatePendingDot?.();
@@ -710,11 +710,19 @@ function getAdminRole(){ return sessionStorage.getItem('cp_admin_role')||'super'
 function isLimited(){ return getAdminRole()==='limited'; }
 // 把文字中的 HTML 特殊符號轉成純文字顯示，防止備註被塞入程式碼
 function escHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// 本機只保留最近 45 天的訂單當備份（全部存會超過瀏覽器 5MB 上限，導致畫面卡住）
+function cacheOrdersLocal(arr){
+  try{
+    const d=new Date(); d.setDate(d.getDate()-45);
+    const cut=d.toISOString().slice(0,10);
+    localStorage.setItem('cp_orders',JSON.stringify((arr||[]).filter(o=>(o.createdAt||'')>=cut)));
+  }catch(e){ try{ localStorage.removeItem('cp_orders'); }catch(_){} console.warn('本機訂單備份略過（空間不足）'); }
+}
 function getOrders(){ return _CACHE.orders || JSON.parse(localStorage.getItem('cp_orders')||'[]'); }
 function saveOrders(d){
   if(db&&!_ordersLoaded){ alert('雲端訂單還在讀取中，請等畫面出現訂單後再操作'); return; }
   _CACHE.orders=d;
-  localStorage.setItem('cp_orders',JSON.stringify(d));
+  cacheOrdersLocal(d);
   if(!db) return;
   const byStore={};
   d.forEach(o=>{ const sid=String(o.customerId||'unknown'); if(!byStore[sid])byStore[sid]=[]; byStore[sid].push(o); });
@@ -1777,7 +1785,7 @@ async function archiveOldOrders(){
       keep.reduce((acc,o)=>{ const s=String(o.customerId||'unknown'); (acc[s]=acc[s]||[]).push(o); return acc; },{})
     ).map(([sid,orders])=>db.collection('cp_orders').doc(sid).set({data:orders})));
     _CACHE.orders=keep;
-    localStorage.setItem('cp_orders',JSON.stringify(keep));
+    cacheOrdersLocal(keep);
     msg.style.display='block';msg.style.color='#2E7D32';
     msg.textContent=`✓ 已清理 ${removed} 筆舊訂單，保留 ${keep.length} 筆。`;
     renderDashboard();renderOrders();
@@ -1859,7 +1867,7 @@ function goTab(tab){
       db.collection('cp_data').doc('orders').get().then(snap=>{
         if(snap.exists && snap.data().data && snap.data().data.length){
           _CACHE.orders=snap.data().data;
-          localStorage.setItem('cp_orders',JSON.stringify(_CACHE.orders));
+          cacheOrdersLocal(_CACHE.orders);
           renderFilterBar();renderOrders();
         }
       }).catch(()=>{});
