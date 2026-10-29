@@ -660,6 +660,7 @@ async function requestErpSend(){
 }
 
 /* ── 訂單即時監聽（斷線自動重連） ── */
+let _ordersLoaded=false;         // 是否已收到雲端最新訂單（收到前不顯示本機舊資料）
 let _knownOrderIds=new Set();     // 後台看過的所有訂單 ID
 let _lastSyncedByStore={};        // 每間店雲端最後一次的內容（JSON）
 function startOrdersListener(){
@@ -674,6 +675,7 @@ function startOrdersListener(){
     _lastSyncedByStore=synced;
     allOrders.forEach(o=>_knownOrderIds.add(o.id));
     _CACHE.orders=allOrders;
+    _ordersLoaded=true;
     localStorage.setItem('cp_orders',JSON.stringify(allOrders));
     showSyncWarn(false);
     if(sessionStorage.getItem('cp_admin')==='1'){
@@ -710,6 +712,7 @@ function isLimited(){ return getAdminRole()==='limited'; }
 function escHtml(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function getOrders(){ return _CACHE.orders || JSON.parse(localStorage.getItem('cp_orders')||'[]'); }
 function saveOrders(d){
+  if(db&&!_ordersLoaded){ alert('雲端訂單還在讀取中，請等畫面出現訂單後再操作'); return; }
   _CACHE.orders=d;
   localStorage.setItem('cp_orders',JSON.stringify(d));
   if(!db) return;
@@ -795,6 +798,7 @@ function twDateStr(){const d=twNow(),pad=n=>String(n).padStart(2,'0');return `${
 
 
 function renderDashboard(){
+  if(db&&!_ordersLoaded){ document.getElementById('dashBody').innerHTML='<div class="empty-state">⏳ 正在讀取雲端最新訂單…</div>'; return; }
   const orders=getOrders();
   const customers=getCustomers();
   const pending=orders.filter(o=>o.status==='pending').length;
@@ -875,6 +879,7 @@ function clearDateFilter(){
 }
 
 function renderOrders(){
+  if(db&&!_ordersLoaded){ document.getElementById('ordersBody').innerHTML='<div class="empty-state">⏳ 正在讀取雲端最新訂單…</div>'; return; }
   const dateFrom=document.getElementById('orderDateFrom')?.value||'';
   const dateTo=document.getElementById('orderDateTo')?.value||'';
   const orders=getOrders().filter(o=>{
