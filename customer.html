@@ -399,6 +399,13 @@ async function initDB(){
 }
 
 // 登入後載入該門市自己的訂單（每間店獨立文件：cp_orders/{storeId}）
+// 只補傳最近 3 天內、雲端沒有的訂單（用來救回剛剛沒傳成功的單）。
+// 更舊的訂單如果雲端沒有，代表後台已經清理掉了，不要再傳回去。
+function isRecentOrder(o){
+  const d=new Date(); d.setDate(d.getDate()-3);
+  const cut=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return (o.createdAt||'')>=cut;
+}
 async function loadMyOrders(user){
   if(!db) return;
   const storeId=String(user.id);
@@ -416,7 +423,7 @@ async function loadMyOrders(user){
     let cloudOrders=(snap.exists&&snap.data().data)?snap.data().data:[];
 
     // 自動補回本機有但雲端沒有的訂單
-    const toRecover=localBackup.filter(lo=>!cloudOrders.some(co=>co.id===lo.id));
+    const toRecover=localBackup.filter(lo=>isRecentOrder(lo)&&!cloudOrders.some(co=>co.id===lo.id));
     if(toRecover.length){
       try{
         if(!snap.exists){ await ref.set({data:[...cloudOrders,...toRecover]}); }
@@ -894,7 +901,7 @@ async function checkUnsyncedOrders(){
     if(!local.length){const bar=document.getElementById('recoverBar');if(bar)bar.style.display='none';return;}
     const snap=await db.collection('cp_orders').doc(String(currentUser.id)).get();
     const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
-    const unsynced=local.filter(lo=>!cloud.some(co=>co.id===lo.id));
+    const unsynced=local.filter(lo=>isRecentOrder(lo)&&!cloud.some(co=>co.id===lo.id));
     const bar=document.getElementById('recoverBar');
     if(bar) bar.style.display=unsynced.length?'flex':'none';
   }catch(e){}
@@ -911,7 +918,7 @@ async function forceRecoverOrders(){
     const ref=db.collection('cp_orders').doc(String(currentUser.id));
     const snap=await ref.get();
     const cloud=(snap.exists&&snap.data().data)?snap.data().data:[];
-    const toAdd=local.filter(lo=>!cloud.some(co=>co.id===lo.id));
+    const toAdd=local.filter(lo=>isRecentOrder(lo)&&!cloud.some(co=>co.id===lo.id));
     const added=toAdd.length;
     if(added>0){
       if(!snap.exists){ await ref.set({data:toAdd}); }
