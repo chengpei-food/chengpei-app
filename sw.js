@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chengpei-v118';
+const CACHE_NAME = 'chengpei-v119';
 const ASSETS = [
   './index.html',
   './customer.html',

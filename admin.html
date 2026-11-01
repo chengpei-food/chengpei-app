@@ -560,8 +560,13 @@ async function dbLoad(key, fallback){
 
 function dbSave(key, data){
   _CACHE[key] = data;
-  localStorage.setItem('cp_'+key, JSON.stringify(data));
-  if(db) db.collection('cp_data').doc(key).set({data}).catch(e=>console.warn('Firestore 寫入失敗:', key, e));
+  try{ localStorage.setItem('cp_'+key, JSON.stringify(data)); }catch(e){ console.warn('本機備份略過:',key); }
+  // 去掉 undefined 欄位（Firestore 不接受 undefined，整筆會寫入失敗）
+  const clean=JSON.parse(JSON.stringify(data));
+  if(db) db.collection('cp_data').doc(key).set({data:clean}).catch(e=>{
+    console.warn('Firestore 寫入失敗:', key, e);
+    alert('⚠️ 資料沒有存到雲端（'+key+'），請重新整理後再試一次。\n錯誤：'+(e.code||e.message));
+  });
 }
 
 async function initDB(){
@@ -1437,7 +1442,7 @@ function saveProd(){
     // 更新
     const p=prods.find(x=>x.code===editCode);
     if(!p) return;
-    p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category; p.step=stepVal>1?stepVal:undefined;
+    p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category; if(stepVal>1) p.step=stepVal; else delete p.step;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
     p.category_display=_selIdx>=0?document.getElementById('pf-category').options[_selIdx].text:category;
   } else {
