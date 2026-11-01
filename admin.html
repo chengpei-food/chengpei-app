@@ -106,6 +106,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .oc-total{font-weight:800;font-size:1rem;color:var(--yellow);}
 .oc-addr{font-size:0.73rem;color:var(--text3);margin-bottom:6px;}
 .oc-note{font-size:0.73rem;color:var(--text3);margin-bottom:8px;}
+body.role-limited .super-only{display:none!important;}
 .note-box{margin:6px 0 8px;padding:7px 10px;background:#FFF4D6;border-left:4px solid #F5A200;border-radius:6px;font-size:0.86rem;font-weight:700;color:#7a4b00;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
 .status-select{background:var(--admin-bg);color:var(--text);border:1.5px solid var(--admin-border);border-radius:8px;padding:6px 10px;font-size:0.82rem;font-family:inherit;cursor:pointer;outline:none;}
 .status-select:focus{border-color:var(--teal-light);}
@@ -348,6 +349,7 @@ input:checked + .slider:before{transform:translateX(20px);}
   <!-- SETTINGS -->
   <div class="screen" id="screen-settings">
     <div class="settings-body">
+      <div class="super-only">
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;">更改超級管理員密碼</div>
       <div class="settings-card">
         <div class="settings-field"><div class="settings-label">目前密碼</div><input type="password" id="oldPw" placeholder="請輸入目前密碼"></div>
@@ -462,6 +464,7 @@ input:checked + .slider:before{transform:translateX(20px);}
       </div>
       <button class="save-settings-btn" onclick="savePickupTime()">儲存自取時段</button>
       <div id="pickupTimeMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
+      </div><!-- /super-only -->
 
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">颱風應變</div>
       <div class="settings-card">
@@ -473,13 +476,15 @@ input:checked + .slider:before{transform:translateX(20px);}
       <button class="save-settings-btn" id="typhoonBtn" onclick="toggleTyphoon()">🌀 開啟颱風模式</button>
 
       <div style="font-size:0.72rem;font-weight:800;color:var(--teal-light);letter-spacing:0.08em;margin-bottom:10px;margin-top:24px;">雲端資料庫</div>
+      <div class="super-only">
       <button class="save-settings-btn" onclick="syncLocalToCloud()" id="syncCloudBtn">☁️ 同步本機資料到雲端</button>
       <div id="syncCloudMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
+      </div>
 
       <button class="save-settings-btn" onclick="archiveOldOrders()" id="archiveBtn" style="margin-top:10px;">🗂️ 清理舊訂單（保留近30天）</button>
       <div id="archiveMsg" style="text-align:center;font-size:0.82rem;margin-top:10px;display:none;"></div>
 
-      <button class="danger-btn" onclick="clearAllData()">⚠️ 清除所有訂單資料</button>
+      <button class="danger-btn super-only" onclick="clearAllData()">⚠️ 清除所有訂單資料</button>
     </div>
   </div>
 
@@ -772,7 +777,8 @@ function loginSuccess(role){
   document.getElementById('tabBar').style.display='flex';
   // 限制管理員：隱藏不適用的 tab
   const limited = (role==='limited');
-  ['tab-products','tab-settings'].forEach(id=>{
+  document.body.classList.toggle('role-limited', limited); // 限制管理員：設定頁只顯示颱風模式、清理舊訂單
+  ['tab-products'].forEach(id=>{
     document.getElementById(id).style.display = limited ? 'none' : '';
   });
   // 顯示角色標籤
@@ -1853,7 +1859,7 @@ async function syncLocalToCloud(){
 /* ── Tabs ── */
 function goTab(tab){
   // 限制管理員：禁止進入 products / settings
-  if(isLimited() && ['products','settings'].includes(tab)) tab='orders';
+  if(isLimited() && tab==='products') tab='orders';
   sessionStorage.setItem('cp_admin_tab', tab);
   document.getElementById('screen-cust-products').classList.remove('active');
   ['dashboard','orders','products','customers','settings'].forEach(t=>{
