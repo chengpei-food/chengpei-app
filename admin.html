@@ -1350,6 +1350,7 @@ function prodCard(p){
         <div style="font-size:0.68rem;color:var(--text3);margin-top:1px;">編碼：${p.code}</div>
       </div>
       <div class="super-only" style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="showProdToAll('${p.code}')" title="讓所有客戶都看得到這個品項" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #5b6bbf;border-radius:8px;background:white;color:#5b6bbf;cursor:pointer;font-weight:600;">👥 全部可見</button>
         <button onclick="openProdForm('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid var(--teal);border-radius:8px;background:white;color:var(--teal);cursor:pointer;font-weight:600;">編輯</button>
         <button onclick="deleteProd('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #e53935;border-radius:8px;background:white;color:#e53935;cursor:pointer;font-weight:600;">刪除</button>
       </div>
@@ -1470,6 +1471,18 @@ function saveProd(){
   renderProducts();
 }
 
+// 一鍵讓所有客戶都看得到某個品項（只影響有設定「可見品項清單」的客戶，沒設定的本來就全部看得到）
+function showProdToAll(code){
+  if(isLimited()) return;
+  const p=getProducts().find(x=>x.code===code); if(!p) return;
+  const custs=getCustomers();
+  const targets=custs.filter(c=>Array.isArray(c.allowedProducts)&&!c.allowedProducts.includes(code));
+  if(!targets.length) return alert(`所有客戶都已經看得到「${p.name}」了。`+(p.status==='NO'?'\n（注意：這個品項目前是下架狀態，要上架客戶才看得到）':''));
+  if(!confirm(`要讓所有客戶都看得到「${p.name}」嗎？\n會加到 ${targets.length} 間店的可見品項清單。`)) return;
+  targets.forEach(c=>c.allowedProducts.push(code));
+  saveCustomers(custs);
+  alert(`✓ 已加到 ${targets.length} 間店。`+(p.status==='NO'?'\n（這個品項目前是下架狀態，記得打開上架）':''));
+}
 function deleteProd(code){
   if(isLimited()) return; // 限制管理員只能上下架、設定售完
   if(!confirm('確定要刪除此品項？')) return;
