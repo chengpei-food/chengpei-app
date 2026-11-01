@@ -260,7 +260,7 @@ input:checked + .slider:before{transform:translateX(20px);}
 
   <!-- PRODUCTS -->
   <div class="screen" id="screen-products">
-    <div style="padding:10px 13px 0;display:flex;justify-content:flex-end;flex-shrink:0;">
+    <div class="super-only" style="padding:10px 13px 0;display:flex;justify-content:flex-end;flex-shrink:0;">
       <button onclick="openProdForm(null)" id="addProdBtn" style="background:var(--teal);color:white;border:none;border-radius:12px;padding:8px 18px;font-size:0.88rem;font-weight:700;cursor:pointer;">＋ 新增品項</button>
     </div>
     <!-- 新增／編輯品項表單 -->
@@ -778,7 +778,7 @@ function loginSuccess(role){
   // 限制管理員：隱藏不適用的 tab
   const limited = (role==='limited');
   document.body.classList.toggle('role-limited', limited); // 限制管理員：設定頁只顯示颱風模式、清理舊訂單
-  ['tab-products'].forEach(id=>{
+  ['tab-customers'].forEach(id=>{
     document.getElementById(id).style.display = limited ? 'none' : '';
   });
   // 顯示角色標籤
@@ -1344,14 +1344,14 @@ function prodCard(p){
         <div class="pm-name">${p.name}</div>
         <div style="font-size:0.68rem;color:var(--text3);margin-top:1px;">編碼：${p.code}</div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;">
+      <div class="super-only" style="display:flex;gap:6px;flex-shrink:0;">
         <button onclick="openProdForm('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid var(--teal);border-radius:8px;background:white;color:var(--teal);cursor:pointer;font-weight:600;">編輯</button>
         <button onclick="deleteProd('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #e53935;border-radius:8px;background:white;color:#e53935;cursor:pointer;font-weight:600;">刪除</button>
       </div>
     </div>
     <div class="pm-spec">${p.spec||'—'} · ${p.unit}</div>
     <div class="pm-foot">
-      <div class="pm-price-wrap">
+      <div class="pm-price-wrap super-only">
         <span class="pm-price-label">售價</span>
         <input class="pm-price-input" type="number" id="price-${p.code}" value="${p.price}" step="0.5">
         <button class="pm-save-btn" onclick="savePrice('${p.code}')">儲存</button>
@@ -1370,6 +1370,7 @@ function prodCard(p){
 
 /* ── Product Form (Add / Edit) ── */
 function openProdForm(code){
+  if(isLimited()) return; // 限制管理員只能上下架、設定售完
   const form=document.getElementById('prodForm');
   const errEl=document.getElementById('prodFormErr');
   errEl.style.display='none';
@@ -1414,6 +1415,7 @@ function closeProdForm(){
 }
 
 function saveProd(){
+  if(isLimited()) return; // 限制管理員只能上下架、設定售完
   const editCode=document.getElementById('prodEditCode').value;
   const inputCode=document.getElementById('pf-code').value.trim().toUpperCase();
   const name=document.getElementById('pf-name').value.trim();
@@ -1464,6 +1466,7 @@ function saveProd(){
 }
 
 function deleteProd(code){
+  if(isLimited()) return; // 限制管理員只能上下架、設定售完
   if(!confirm('確定要刪除此品項？')) return;
   const prods=getProducts().filter(x=>x.code!==code);
   saveProducts(prods);
@@ -1472,6 +1475,7 @@ function deleteProd(code){
 }
 
 function savePrice(code){
+  if(isLimited()) return; // 限制管理員只能上下架、設定售完
   const prods=getProducts();
   const p=prods.find(x=>x.code===code);
   if(!p) return;
@@ -1859,7 +1863,7 @@ async function syncLocalToCloud(){
 /* ── Tabs ── */
 function goTab(tab){
   // 限制管理員：禁止進入 products / settings
-  if(isLimited() && tab==='products') tab='orders';
+  if(isLimited() && tab==='customers') tab='orders';
   sessionStorage.setItem('cp_admin_tab', tab);
   document.getElementById('screen-cust-products').classList.remove('active');
   ['dashboard','orders','products','customers','settings'].forEach(t=>{
