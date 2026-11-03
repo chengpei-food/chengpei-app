@@ -195,6 +195,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
   <div class="header-right">
     <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
     <button id="btnUpdate" class="header-logout" onclick="forceUpdateApp()" style="padding:5px 8px;font-size:0.72rem;display:none;">更新</button>
+    <button id="btnFont" class="header-logout" onclick="cycleFontSize()" title="調整字體大小" style="padding:5px 8px;font-size:0.72rem;">字 A</button>
     <button class="header-logout" onclick="logout()" style="padding:5px 8px;font-size:0.72rem;">登出</button>
   </div>
   </div>
@@ -1090,6 +1091,21 @@ function syncAll(){
   renderCart();renderCheckout();
 }
 
+/* ── 字體大小（每台手機各自記住） ── */
+const FONT_SIZES=[{p:100,l:'字 A'},{p:115,l:'字 A+'},{p:130,l:'字 A++'}];
+function applyFontSize(){
+  let i=0; try{ i=parseInt(localStorage.getItem('cp_font_idx')||'0')||0; }catch(e){}
+  if(i<0||i>=FONT_SIZES.length) i=0;
+  document.documentElement.style.fontSize=FONT_SIZES[i].p+'%';
+  const b=document.getElementById('btnFont'); if(b) b.textContent=FONT_SIZES[i].l;
+  return i;
+}
+function cycleFontSize(){
+  const i=(applyFontSize()+1)%FONT_SIZES.length;
+  try{ localStorage.setItem('cp_font_idx',String(i)); }catch(e){}
+  applyFontSize();
+}
+applyFontSize();
 function goTab(tab){
   // 離開結帳頁、或購物車有新品項時，把上一張的「送出成功」畫面收起來
   if(tab!=='checkout'||Object.keys(cart).length) restoreOrderForm();
