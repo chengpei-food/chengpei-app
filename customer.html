@@ -1092,7 +1092,7 @@ function syncAll(){
 }
 
 /* ── 字體大小（每台手機各自記住） ── */
-const FONT_SIZES=[{p:100,l:'字 A'},{p:115,l:'字 A+'},{p:130,l:'字 A++'}];
+const FONT_SIZES=[{p:100,l:'字 A'},{p:115,l:'字 A+'},{p:130,l:'字 A++'},{p:150,l:'字 A+++'}];
 function applyFontSize(){
   let i=0; try{ i=parseInt(localStorage.getItem('cp_font_idx')||'0')||0; }catch(e){}
   if(i<0||i>=FONT_SIZES.length) i=0;
