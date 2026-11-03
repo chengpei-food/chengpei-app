@@ -650,6 +650,7 @@ function renderErpStatus(){
   const online=st.heartbeat&&(Date.now()-st.heartbeat<3*60*1000);
   const mode=st.mode==='test'?'（測試模式）':'';
   let html=(online?'🟢 送單電腦在線':'🔴 送單電腦離線（請確認公司筆電已開機、送單程式有在執行）')+mode;
+  if(online&&st.ipOk===false) html+=`<br>⚠️ 固定 IP 未連線（目前 ${escHtml(st.ip||'查不到')}），程式會自動重撥，若一直沒恢復請到筆電檢查網路線和「HiNet固定IP」撥號`;
   if(st.running) html+='　⏳ 送單中…';
   else if(st.finishedAt) html+=`　上次送單 ${escHtml(st.finishedAt.slice(5,16))}：${st.ok?'✅':'⚠️'} ${escHtml(st.message||'')}`;
   const issues=[...(st.failed||[]),...(st.skipped||[])];
