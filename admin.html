@@ -239,11 +239,6 @@ input:checked + .slider:before{transform:translateX(20px);}
       </div>
     </div>
     <div id="erpStatusBar" style="display:none;padding:6px 13px;font-size:0.76rem;background:#f1f8f1;border-bottom:1px solid var(--admin-border);color:#2e5d32;line-height:1.5;"></div>
-    <!-- 批次狀態列 -->
-    <div style="background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:8px 13px;display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-      <button onclick="batchAdvanceStatus('confirmed','shipping')" style="flex:1;padding:7px 10px;background:#E8F5E9;color:#2E7D32;border:1.5px solid #A5D6A7;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">已確認 → 出貨中</button>
-      <button onclick="batchAdvanceStatus('shipping','done')" style="flex:1;padding:7px 10px;background:#F0F0F0;color:#555;border:1.5px solid #ccc;border-radius:8px;font-size:0.8rem;font-weight:700;cursor:pointer;white-space:nowrap;">出貨中 → 已完成</button>
-    </div>
     <!-- 日期篩選列 -->
     <div style="background:var(--admin-card);border-bottom:1px solid var(--admin-border);padding:8px 13px;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;">
       <span style="font-size:0.78rem;color:var(--text2);font-weight:700;white-space:nowrap;">📅 日期</span>
@@ -853,7 +848,7 @@ function renderDashboard(){
 let orderFilter='all', orderCustFilter='all';
 
 function renderFilterBar(){
-  const filters=[['all','全部'],['pending','待確認'],['confirmed','已確認'],['shipping','出貨中'],['done','已完成'],['rejected','已拒絕']];
+  const filters=[['all','全部'],['pending','待確認'],['confirmed','已確認'],['rejected','已拒絕']];
   document.getElementById('filterBar').innerHTML=filters.map(([v,l])=>`<span class="filter-chip${v===orderFilter?' active':''}" onclick="setFilter('${v}')">${l}</span>`).join('');
   renderCustFilterBar();
 }
@@ -933,8 +928,8 @@ function renderOrders(){
         <select class="status-select" onchange="updateStatus('${o.id}',this.value)">
           <option value="pending" ${o.status==='pending'?'selected':''}>待確認</option>
           <option value="confirmed" ${o.status==='confirmed'?'selected':''}>已確認</option>
-          <option value="shipping" ${o.status==='shipping'?'selected':''}>出貨中</option>
-          <option value="done" ${o.status==='done'?'selected':''}>已完成</option>
+          ${o.status==='shipping'?'<option value="shipping" selected>出貨中</option>':''}
+          ${o.status==='done'?'<option value="done" selected>已完成</option>':''}
           <option value="rejected" ${o.status==='rejected'?'selected':''}>已拒絕</option>
         </select>
         ${isLimited()?'': `<button onclick="deleteOrder('${o.id}')" style="background:none;border:1.5px solid #e53935;color:#e53935;border-radius:8px;padding:6px 10px;font-size:0.78rem;font-weight:700;cursor:pointer;">刪除</button>`}
