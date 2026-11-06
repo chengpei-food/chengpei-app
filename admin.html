@@ -2284,7 +2284,7 @@ function stShell(doc){
         ${doc.status==='counting'?`<button class="export-btn" style="background:var(--teal)" onclick="stRefetch()">🔄 重新抓帳面</button>
         <button class="export-btn" style="background:var(--teal-light)" onclick="stChangeBase()">📅 改基準日</button>
         <button class="export-btn" style="background:#8e24aa" onclick="stRecountAllDiff()">🔁 有差異的全部請重盤</button>`:''}
-        <button class="export-btn" onclick="stExport()">📥 匯出 Ecount 盤點 Excel</button>
+        <button class="export-btn" onclick="stExport()">📥 匯出 Key入清單 Excel</button>
         ${doc.status==='counting'?`<button class="export-btn" style="background:#C62828" onclick="stClose()">✅ 結束盤點</button>`:`<button class="export-btn" style="background:#777" onclick="stReopen()">↩️ 重新開啟</button>`}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;" id="stChips"></div>
@@ -2526,26 +2526,30 @@ function stExport(){
   const doc=_stDocs[_stSel]; if(!doc) return;
   const rows=stRows(doc), counted=rows.filter(r=>r.qty!==null);
   if(!counted.length) return alert('還沒有任何盤點數字');
-  if(!(doc.book&&doc.book.state==='done')&&!confirm('還沒有抓到 Ecount 帳面，差異欄會是空的。仍要匯出嗎？')) return;
+  if(!(doc.book&&doc.book.state==='done')) return alert('還沒有抓到 Ecount 帳面，算不出差異。\n請等帳面出現（或按「🔄 重新抓帳面」）後再匯出。');
   const ymd=doc.baseDate.replace(/-/g,'');
-  const upload=[['日期','序號','倉庫','品項編碼','品項名稱','規格','數量','備註']];
-  counted.filter(r=>!r.noCode).forEach(r=>upload.push([ymd,1,doc.wh||'100',r.code,r.name,r.spec,r.qty,[r.exp?'效期'+r.exp:'',r.note].filter(Boolean).join(' ')]));
+  // Key入清單：只列有差異的品項，照品項編碼排序，方便對照 Ecount 盤點輸入手動 key
+  const diffs=rows.filter(r=>r.diff!==null&&r.diff!==0).sort((a,b)=>a.code.localeCompare(b.code));
+  const keyable=diffs.filter(r=>!r.noCode), noCode=diffs.filter(r=>r.noCode);
+  const todoBook=rows.filter(r=>r.qty===null&&r.book);
+  const recountPending=rows.filter(r=>r.recount);
+  const key=[[`橙沛 ${_stSel} 盤點　Key入清單（只列有差異的品項）`],
+    [`Ecount 盤點日期：${doc.baseDate}　倉庫：${doc.wh||'100'}　帳面抓取：${doc.book.fetchedAt||''}`],
+    ['數量請 key「實盤」那一欄'],[],
+    ['品項編碼','品名','規格','單位','週四帳面','實盤（要key的數字）','差異','已key ✓','備註']];
+  keyable.forEach(r=>key.push([r.code,r.name,r.spec,r.unit,r.book,r.qty,r.diff,'',[r.recount?'⚠️ 請重盤中':'',r.exp?'效期'+r.exp:'',r.note].filter(Boolean).join(' ')]));
+  key.push([],[`共 ${keyable.length} 項要 key`]);
+  if(noCode.length) key.push([`⚠️ ${noCode.length} 項清單外品項沒有編碼，請先在 Ecount 找到對應品項：`+noCode.map(r=>r.name+'（實盤 '+stQ(r.qty)+'）').join('、')]);
+  if(recountPending.length) key.push([`⚠️ 還有 ${recountPending.length} 項在「請重盤」，數字可能還會變`]);
+  if(todoBook.length) key.push([`⚠️ 有 ${todoBook.length} 項帳面有數量但沒盤（不在上面清單，Ecount 不會調整）`]);
   const detail=[['品項編碼','品項名稱','規格','單位','存放','週四帳面','實盤','差異','週四已撿待出','最近效期','盤點人','盤點時間','備註','說明']];
   rows.forEach(r=>detail.push([r.noCode?'':r.code,r.name,r.spec,r.unit,r.storage,r.book===null?'':r.book,r.qty===null?'':r.qty,r.diff===null?'':r.diff,r.picked||'',r.exp,r.by,r.at,r.note,
     [r.qty===null?'未盤':'',r.recount?'請重盤中':r.recounted?'已重盤':'',r.extra?'App清單外':'',r.notInErp?'ERP無帳':'',r.noCode?'無編碼':'',r.prev?`原 ${r.prev.qty}（${r.prev.by}）`:''].filter(Boolean).join('、')]));
-  const noCode=counted.filter(r=>r.noCode);
-  const info=[['橙沛 '+_stSel+' 盤點'],[],['盤點日',doc.countDate],['帳面基準日（Ecount 盤點日期）',doc.baseDate],['倉庫',doc.wh||'100'],
-    ['帳面抓取',doc.book&&doc.book.fetchedAt||'未抓'],['已盤',`${counted.length} / ${rows.length}`],[],
-    ['「盤點輸入」工作表：每個已盤品項一行，數量＝實盤數，日期＝帳面基準日。'],
-    ['上傳前請對照 Ecount「盤點輸入」的上傳格式欄位順序，必要時調整欄位。'],
-    ['未盤的品項不會出現在上傳表，Ecount 不會調整它們。'],
-    ...(noCode.length?[[`⚠️ ${noCode.length} 項清單外品項沒有編碼，沒放進上傳表：`+noCode.map(r=>r.name).join('、')]]:[])];
   const wb=XLSX.utils.book_new();
-  const ws1=XLSX.utils.aoa_to_sheet(upload); ws1['!cols']=[{wch:10},{wch:5},{wch:6},{wch:14},{wch:24},{wch:16},{wch:8},{wch:24}];
+  const ws1=XLSX.utils.aoa_to_sheet(key); ws1['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:9},{wch:16},{wch:8},{wch:8},{wch:24}];
   const ws2=XLSX.utils.aoa_to_sheet(detail); ws2['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:6},{wch:9},{wch:8},{wch:8},{wch:10},{wch:11},{wch:8},{wch:17},{wch:20},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,ws1,'盤點輸入');
+  XLSX.utils.book_append_sheet(wb,ws1,'Key入清單');
   XLSX.utils.book_append_sheet(wb,ws2,'差異明細');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(info),'說明');
   XLSX.writeFile(wb,`橙沛盤點_${_stSel}_基準${ymd}.xlsx`);
 }
 </script>
