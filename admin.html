@@ -631,6 +631,18 @@ async function initDB(){
 
     startOrdersListener();
     startErpStatusListener();
+    // 品項、客戶也即時同步：避免某台電腦用舊資料存檔，把別人剛改的設定蓋掉
+    db.collection('cp_data').doc('products').onSnapshot(snap=>{
+      if(!snap.exists||!snap.data().data) return;
+      _CACHE.products=snap.data().data;
+      try{ localStorage.setItem('cp_products',JSON.stringify(_CACHE.products)); }catch(e){}
+      if(document.getElementById('tab-products')?.classList.contains('active')&&document.getElementById('prodForm')?.style.display==='none'){ try{ renderProducts(); }catch(e){} }
+    },e=>console.warn('品項監聽中斷:',e));
+    db.collection('cp_data').doc('customers').onSnapshot(snap=>{
+      if(!snap.exists||!snap.data().data) return;
+      _CACHE.customers=snap.data().data;
+      try{ localStorage.setItem('cp_customers',JSON.stringify(_CACHE.customers)); }catch(e){}
+    },e=>console.warn('客戶監聽中斷:',e));
   }
 }
 
