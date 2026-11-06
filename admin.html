@@ -343,6 +343,11 @@ input:checked + .slider:before{transform:translateX(20px);}
     <div id="cpList" style="flex:1;overflow-y:auto;padding:0 0 80px;"></div>
   </div>
   <!-- SETTINGS -->
+  <!-- STOCKTAKE 盤點 -->
+  <div class="screen" id="screen-stocktake">
+    <div class="screen-body" id="stocktakeBody"></div>
+  </div>
+
   <div class="screen" id="screen-settings">
     <div class="settings-body">
       <div class="super-only">
@@ -494,6 +499,7 @@ input:checked + .slider:before{transform:translateX(20px);}
   <div class="tab" id="tab-orders" onclick="goTab('orders')"><span class="tab-label">訂單</span><span class="pending-dot" id="pendingDot">0</span></div>
   <div class="tab" id="tab-products" onclick="goTab('products')"><span class="tab-label">品項</span></div>
   <div class="tab" id="tab-customers" onclick="goTab('customers')"><span class="tab-label">客戶</span></div>
+  <div class="tab" id="tab-stocktake" onclick="goTab('stocktake')"><span class="tab-label">盤點</span></div>
   <div class="tab" id="tab-settings" onclick="goTab('settings')"><span class="tab-label">設定</span></div>
 </div>
 
@@ -650,7 +656,7 @@ async function initDB(){
 let _erpStatus=null;
 function startErpStatusListener(){
   db.collection('cp_data').doc('erp_status').onSnapshot(snap=>{
-    _erpStatus=snap.exists?snap.data():null; renderErpStatus();
+    _erpStatus=snap.exists?snap.data():null; renderErpStatus(); try{ stRenderIfActive(); }catch(e){}
   },err=>{ console.warn('ERP狀態監聽中斷:',err); setTimeout(startErpStatusListener,10000); });
   setInterval(renderErpStatus,60000);
 }
@@ -704,6 +710,7 @@ function startOrdersListener(){
         const active=document.querySelector('.tab.active')?.id;
         if(active==='tab-orders'){ renderFilterBar(); renderOrders(); }
         else if(active==='tab-dashboard') renderDashboard();
+        else if(active==='tab-stocktake') renderStocktake();
       }catch(e){ console.warn('畫面更新失敗:',e); }
     }
   }, err=>{
@@ -814,7 +821,7 @@ function logout(){
   document.getElementById('headerStripe').style.display='none';
   document.getElementById('tabBar').style.display='none';
   document.getElementById('roleTag').style.display='none';
-  ['dashboard','orders','products','customers','settings'].forEach(t=>document.getElementById('screen-'+t).classList.remove('active'));
+  ['dashboard','orders','products','customers','stocktake','settings'].forEach(t=>document.getElementById('screen-'+t).classList.remove('active'));
   document.getElementById('screen-login').classList.add('active');
   document.getElementById('adminPw').value='';
 }
@@ -1675,7 +1682,7 @@ function openCustProducts(id){
   document.getElementById('cpTitle').textContent = cust.name + ' 的可見品項';
   document.getElementById('cpSearch').value = '';
   cpActiveCat = 'all';
-  ['dashboard','orders','products','customers','settings'].forEach(t=>document.getElementById('screen-'+t).classList.remove('active'));
+  ['dashboard','orders','products','customers','stocktake','settings'].forEach(t=>document.getElementById('screen-'+t).classList.remove('active'));
   document.getElementById('screen-cust-products').classList.add('active');
   renderCpList();
 }
@@ -1899,7 +1906,7 @@ function goTab(tab){
   if(isLimited() && tab==='customers') tab='orders';
   sessionStorage.setItem('cp_admin_tab', tab);
   document.getElementById('screen-cust-products').classList.remove('active');
-  ['dashboard','orders','products','customers','settings'].forEach(t=>{
+  ['dashboard','orders','products','customers','stocktake','settings'].forEach(t=>{
     document.getElementById('screen-'+t).classList.toggle('active',t===tab);
     document.getElementById('tab-'+t).classList.toggle('active',t===tab);
   });
@@ -1919,6 +1926,7 @@ function goTab(tab){
   }
   if(tab==='products') renderProducts();
   if(tab==='customers') renderCustomers();
+  if(tab==='stocktake') renderStocktake();
   if(tab==='settings'){ loadAnnouncement(); loadClosedDays(); loadOrderTime(); loadTyphoon(); loadPickupTime(); }
 }
 
@@ -2196,5 +2204,329 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
   </div>
 </div>
 
+<script>
+/* ══════════════════════════════════════════════════════
+   盤點（cp_stocktake/{YYYYMM}）
+   - 倉管用 stocktake.html 輸入實盤數（盲盤）
+   - 帳面數由送單程式查 Ecount 庫存後寫入 book（基準日預設＝盤點日＋1，週四）
+   ══════════════════════════════════════════════════════ */
+let _stDocs={}, _stListening=false, _stSel=null, _stShellKey='', _stFilter='all', _stErr='';
+const ST_STORAGES=['常溫','冷藏','冷凍'];
+function stAddDays(ymd,n){ const d=new Date(ymd+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function stMD(ymd){ if(!ymd) return ''; const d=new Date(ymd+'T00:00:00Z'); return (d.getUTCMonth()+1)+'/'+d.getUTCDate()+'（週'+'日一二三四五六'[d.getUTCDay()]+'）'; }
+function stNowStr(){ return twISOString().replace('T',' '); }
+function stNowHM(){ return twISOString().slice(11,16); }
+function stUrl(){ return new URL('stocktake.html',location.href).href; }
+const stQ=q=>(q===null||q===undefined||q==='')?'':String(Math.round(Number(q)*1000)/1000);
+function stDeliv(o){
+  if(o.deliveryDate) return o.deliveryDate;
+  if(!o.createdAt) return '';
+  return stAddDays(o.createdAt.slice(0,10), new Date(o.createdAt.slice(0,10)+'T00:00:00Z').getUTCDay()===5?3:1);
+}
+function stErpOnline(){ const st=_erpStatus; return !!(st&&st.heartbeat&&Date.now()-st.heartbeat<3*60*1000&&st.online!==false); }
+function stBaseOrders(baseDate){ return getOrders().filter(o=>stDeliv(o)===baseDate&&o.status!=='rejected'); }
+// 週四已撿待出：到貨日＝基準日、沒被拒絕的訂單，依品項加總
+function stPicked(baseDate){
+  const m={};
+  stBaseOrders(baseDate).forEach(o=>(o.items||[]).forEach(it=>{ if(!it.code) return; m[it.code]=Math.round(((m[it.code]||0)+(Number(it.qty)||0))*1000)/1000; }));
+  return m;
+}
+
+function stStartListener(){
+  if(_stListening||!db) return; _stListening=true;
+  db.collection('cp_stocktake').onSnapshot(qs=>{
+    _stErr='';
+    const m={}; qs.forEach(d=>{ m[d.id]=d.data(); }); _stDocs=m;
+    if(_stSel===null){ _stSel=Object.keys(m).filter(k=>m[k].status==='counting').sort().pop()||''; }
+    stRenderIfActive();
+  },e=>{
+    console.warn('盤點監聽中斷',e); _stListening=false;
+    _stErr=e.code==='permission-denied'?'⚠️ 讀不到盤點資料：Firestore 規則還沒加 cp_stocktake（請看說明筆記）':'⚠️ 盤點資料連線中斷，重新連線中…';
+    stRenderIfActive(); setTimeout(stStartListener,8000);
+  });
+}
+function stRenderIfActive(){ if(document.getElementById('tab-stocktake')?.classList.contains('active')) renderStocktake(); }
+
+function renderStocktake(){
+  if(!db){ document.getElementById('stocktakeBody').innerHTML='<div class="empty-state">目前無法連線雲端</div>'; return; }
+  stStartListener();
+  const doc=_stSel?_stDocs[_stSel]:null;
+  const key=(_stSel||'new')+'|'+(doc?doc.status:'new');
+  if(key!==_stShellKey||!document.getElementById('stMain')){ _stShellKey=key; document.getElementById('stocktakeBody').innerHTML=stShell(doc); }
+  stFill();
+}
+function stShell(doc){
+  const ids=Object.keys(_stDocs).sort().reverse();
+  const sel=`<select id="stSel" onchange="_stSel=this.value;renderStocktake()" style="flex:1;padding:8px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.9rem;background:#fff;">
+    <option value="">＋ 新的盤點</option>
+    ${ids.map(id=>`<option value="${id}" ${id===_stSel?'selected':''}>${id.slice(0,4)}/${id.slice(4)}　${_stDocs[id].status==='counting'?'🟢 盤點中':'已結束'}</option>`).join('')}
+  </select>`;
+  const inp='padding:8px 10px;border:1.5px solid var(--admin-border);border-radius:8px;font-size:0.92rem;background:#fff;';
+  let main='';
+  if(!doc){
+    const today=twDateStr();
+    main=`
+      <div class="settings-card" style="padding:14px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <label style="font-size:0.75rem;font-weight:700;color:var(--teal);">盤點日（週三）<br><input type="date" id="stCountDate" value="${today}" onchange="document.getElementById('stBaseDate').value=stAddDays(this.value,1);stFill()" style="${inp}"></label>
+          <label style="font-size:0.75rem;font-weight:700;color:var(--teal);">帳面基準日（預設＝盤點日＋1）<br><input type="date" id="stBaseDate" value="${stAddDays(today,1)}" onchange="stFill()" style="${inp}"></label>
+        </div>
+        <div style="font-size:0.75rem;color:var(--text2);margin-top:8px;line-height:1.6;">Ecount 銷貨單日期＝到貨日，所以用「週四」的帳面來比對（週四要出的貨已先撿出、不盤）。倉庫：100 總倉。</div>
+      </div>
+      <div class="sec-title" style="margin-top:16px;">開始前檢查</div>
+      <div id="stChecks"></div>
+      <button class="save-settings-btn" onclick="stStart()" style="margin-top:12px;">📋 開始盤點</button>`;
+  } else {
+    main=`
+      <div id="stHead"></div>
+      <div id="stWarn"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">
+        ${doc.status==='counting'?`<button class="export-btn" style="background:var(--teal)" onclick="stRefetch()">🔄 重新抓帳面</button>
+        <button class="export-btn" style="background:var(--teal-light)" onclick="stChangeBase()">📅 改基準日</button>`:''}
+        <button class="export-btn" onclick="stExport()">📥 匯出 Ecount 盤點 Excel</button>
+        ${doc.status==='counting'?`<button class="export-btn" style="background:#C62828" onclick="stClose()">✅ 結束盤點</button>`:`<button class="export-btn super-only" style="background:#777" onclick="stReopen()">↩️ 重新開啟</button>`}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;" id="stChips"></div>
+      <input id="stSearch" type="search" placeholder="🔍 搜尋品名或編碼" oninput="stFill()" style="width:100%;${inp}margin-bottom:8px;">
+      <div id="stTable"></div>`;
+  }
+  return `
+    <div id="stErr"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">${sel}</div>
+    <div id="stMain">${main}</div>
+    <div class="super-only">
+      <div class="sec-title" style="margin-top:28px;">倉管手機設定</div>
+      <div class="settings-card" style="padding:14px;">
+        <div style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">倉管用手機打開下面網址，輸入姓名＋PIN 就能盤點（看不到帳面數）</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;"><input readonly value="${escHtml(stUrl())}" style="flex:1;${inp}font-size:0.78rem;" onclick="this.select()"><button class="export-btn" style="background:var(--teal)" onclick="navigator.clipboard&&navigator.clipboard.writeText('${escHtml(stUrl())}').then(()=>alert('已複製網址'))">複製</button></div>
+        <div style="display:flex;gap:6px;align-items:center;"><span style="font-size:0.8rem;font-weight:700;color:var(--teal);white-space:nowrap;">倉管 PIN</span><input id="stPin" inputmode="numeric" placeholder="4～8 位數字" value="${escHtml((_CACHE.config||{}).stocktakePin||'')}" style="flex:1;${inp}"><button class="export-btn" style="background:var(--teal)" onclick="stSavePin()">儲存</button></div>
+      </div>
+    </div>`;
+}
+
+/* ── 開始前三項檢查 ── */
+function stChecks(countDate,baseDate){
+  const res=[];
+  // ① 週四待確認單是否都進 ERP
+  const ords=stBaseOrders(baseDate);
+  const notIn=ords.filter(o=>o.status==='pending'&&!o.erpSent);
+  const unsure=ords.filter(o=>String(o.erpSlipNo||'').startsWith('待確認'));
+  if(!_ordersLoaded) res.push({lv:'fail',t:'① 基準日訂單都已進 ERP',d:'訂單還在讀取中，請稍等'});
+  else if(notIn.length) res.push({lv:'fail',t:'① 基準日訂單都已進 ERP',d:`${stMD(baseDate)} 還有 ${notIn.length} 張待確認單沒進 ERP：`+[...new Set(notIn.map(o=>o.customerCompany||o.customerName||''))].map(escHtml).join('、')+'。請先按訂單頁「📤 送進ERP」或用 Excel 匯入。'});
+  else if(unsure.length) res.push({lv:'fail',t:'① 基準日訂單都已進 ERP',d:`有 ${unsure.length} 張標記「待確認(請查ERP)」，請先到 Ecount 確認有沒有進去`});
+  else res.push({lv:'ok',t:'① 基準日訂單都已進 ERP',d:`${stMD(baseDate)} 共 ${ords.length} 張單，都已進 ERP`});
+  // ② 是否過下單截止
+  const cfg=_CACHE.config||{};
+  const cut=cfg.orderTimeTo||localStorage.getItem('cp_order_time_to')||'12:30';
+  const today=twDateStr(), hm=stNowHM();
+  if(countDate>today) res.push({lv:'fail',t:'② 已過下單截止',d:`盤點日是 ${stMD(countDate)}，還沒到`});
+  else if(countDate===today&&hm<cut) res.push({lv:'fail',t:'② 已過下單截止',d:`現在 ${hm}，下單截止 ${cut}，請截止後再開始`});
+  else {
+    const pTo=cfg.pickupTimeTo||'';
+    if(!cfg.pickupTimeFrom&&!pTo) res.push({lv:'warn',t:'② 已過下單截止',d:`一般訂單已截止（${cut}）。⚠️ 自取下單「不限時段」，盤點中仍可能有新的自取單`});
+    else if(countDate===today&&hm<pTo) res.push({lv:'warn',t:'② 已過下單截止',d:`一般訂單已截止（${cut}）。⚠️ 自取到 ${pTo} 才截止，之後的自取單要記得撿出，並重新抓帳面`});
+    else res.push({lv:'ok',t:'② 已過下單截止',d:`一般 ${cut}${pTo?`、自取 ${pTo}`:''} 都已截止`});
+  }
+  // ③ 送單程式是否在線
+  const st=_erpStatus;
+  if(!stErpOnline()) res.push({lv:'fail',t:'③ 送單程式在線',d:'送單電腦離線，抓不到 Ecount 帳面。請確認公司筆電已開機、送單程式有在執行'});
+  else if(st.running) res.push({lv:'warn',t:'③ 送單程式在線',d:'送單中，會等送完才查庫存'});
+  else if(st.ipOk===false) res.push({lv:'warn',t:'③ 送單程式在線',d:'在線，但固定 IP 未連線，查庫存可能失敗'});
+  else res.push({lv:'ok',t:'③ 送單程式在線',d:'🟢 在線'});
+  return res;
+}
+function stChecksHtml(list){
+  const ic={ok:'✅',warn:'⚠️',fail:'❌'}, bg={ok:'#f1f8f1',warn:'#fff4e5',fail:'#fdecea'};
+  return list.map(c=>`<div style="background:${bg[c.lv]};border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:0.82rem;line-height:1.55;"><b>${ic[c.lv]} ${c.t}</b><br>${c.d}</div>`).join('');
+}
+
+/* ── 差異表資料 ── */
+function stRows(doc){
+  const pmap={}; getProducts().forEach(p=>{ if(p.code) pmap[p.code]=p; });
+  const counts=doc.counts||{};
+  const bookDone=doc.book&&doc.book.state==='done'&&doc.book.items;
+  const book=bookDone?doc.book.items:null;
+  const picked=doc.status==='counting'?stPicked(doc.baseDate):(doc.picked||stPicked(doc.baseDate));
+  const codes=new Set();
+  Object.values(pmap).forEach(p=>{ if(p.status!=='NO') codes.add(p.code); });
+  Object.keys(counts).forEach(c=>codes.add(c));
+  if(book) Object.entries(book).forEach(([c,v])=>{ if(Number(v.q)!==0||pmap[c]) codes.add(c); });
+  Object.keys(picked).forEach(c=>codes.add(c));
+  return [...codes].map(code=>{
+    const p=pmap[code]||{}, c=counts[code], b=book?book[code]:null;
+    const bq=book?(b?Number(b.q)||0:0):null, qty=c?Number(c.qty):null;
+    return {code,name:p.name||(c&&c.name)||(b&&b.n)||code,spec:p.spec||(c&&c.spec)||(b&&b.s)||'',unit:p.unit||(c&&c.unit)||'',
+      storage:ST_STORAGES.includes(p.storage)?p.storage:(c&&ST_STORAGES.includes(c.storage)?c.storage:'其他'),
+      book:bq,qty,diff:(qty!==null&&bq!==null)?Math.round((qty-bq)*1000)/1000:null,picked:picked[code]||0,
+      exp:c?c.exp||'':'',by:c?c.by||'':'',at:c?c.at||'':'',note:c?c.note||'':'',prev:c?c.prev||null:null,
+      extra:!pmap[code],noCode:!!(c&&c.noCode),notInErp:!!book&&!b&&qty!==null};
+  }).sort((a,b)=>ST_STORAGES.concat('其他').indexOf(a.storage)-ST_STORAGES.concat('其他').indexOf(b.storage)||a.code.localeCompare(b.code));
+}
+
+function stFill(){
+  const errEl=document.getElementById('stErr'); if(errEl) errEl.innerHTML=_stErr?`<div style="background:#fdecea;color:#C62828;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:0.82rem;font-weight:700;">${_stErr}</div>`:'';
+  const doc=_stSel?_stDocs[_stSel]:null;
+  if(!doc){
+    const cd=document.getElementById('stCountDate')?.value, bd=document.getElementById('stBaseDate')?.value;
+    const el=document.getElementById('stChecks'); if(el&&cd&&bd) el.innerHTML=stChecksHtml(stChecks(cd,bd));
+    return;
+  }
+  const rows=stRows(doc);
+  const counted=rows.filter(r=>r.qty!==null), diffs=rows.filter(r=>r.diff!==null&&r.diff!==0);
+  const todoBook=rows.filter(r=>r.qty===null&&r.book);
+  const counters=[...new Set(counted.map(r=>r.by).filter(Boolean))];
+  const b=doc.book||{};
+  const bookTxt=!b.state?'⏳ 還沒抓帳面':b.state==='done'?`✅ 帳面 ${stMD(b.baseDate)}，${b.count} 個品項（${escHtml((b.fetchedAt||'').slice(5,16))} 抓取）`:b.state==='error'?`❌ ${escHtml(b.message||'抓帳面失敗')}`:`⏳ ${escHtml(b.message||'抓帳面中…')}`;
+  document.getElementById('stHead').innerHTML=`
+    <div class="settings-card" style="padding:14px;font-size:0.84rem;line-height:1.75;">
+      <div style="font-size:1rem;font-weight:800;color:var(--teal);">${_stSel.slice(0,4)}年${+_stSel.slice(4)}月盤點　${doc.status==='counting'?'<span style="color:#2e7d32">🟢 盤點中</span>':'<span style="color:#777">已結束</span>'}</div>
+      盤點日 ${stMD(doc.countDate)}｜帳面基準日 <b>${stMD(doc.baseDate)}</b>｜倉庫 ${escHtml(doc.wh||'100')}<br>
+      開始 ${escHtml((doc.startedAt||'').slice(5,16))}${doc.closedAt?`｜結束 ${escHtml(doc.closedAt.slice(5,16))}`:''}${counters.length?`｜盤點人：${counters.map(escHtml).join('、')}`:''}<br>
+      ${bookTxt}<br>
+      <b>已盤 ${counted.length} / ${rows.length}</b>｜有差異 <b style="color:#C62828">${diffs.length}</b> 項｜未盤但帳面有數 ${todoBook.length} 項
+    </div>`;
+  // 警告
+  const warns=[];
+  if(b.state==='done'&&b.baseDate!==doc.baseDate) warns.push(`帳面是 ${stMD(b.baseDate)} 的，但基準日已改成 ${stMD(doc.baseDate)}，請按「重新抓帳面」`);
+  if(doc.status==='counting'){
+    const ords=stBaseOrders(doc.baseDate);
+    const late=ords.filter(o=>doc.startedAt&&(o.createdAt||'').replace('T',' ')>doc.startedAt);
+    if(late.length) warns.push(`盤點開始後又有 ${late.length} 張 ${stMD(doc.baseDate)} 的新訂單（${[...new Set(late.map(o=>o.customerCompany||o.customerName||''))].map(escHtml).join('、')}）：請確認倉庫已撿出，送進 ERP 後再「重新抓帳面」`);
+    const notIn=ords.filter(o=>o.status==='pending'&&!o.erpSent);
+    if(notIn.length) warns.push(`${stMD(doc.baseDate)} 還有 ${notIn.length} 張待確認單沒進 ERP，帳面會不準`);
+    if(!stErpOnline()) warns.push('送單電腦離線，現在無法抓帳面');
+  }
+  document.getElementById('stWarn').innerHTML=warns.map(w=>`<div style="background:#fff4e5;border-radius:10px;padding:9px 12px;margin-top:8px;font-size:0.8rem;line-height:1.55;">⚠️ ${w}</div>`).join('');
+  // 篩選
+  const chips=[['all','全部'],['diff','有差異'],['todo','未盤'],...ST_STORAGES.map(s=>[s,s]),...(rows.some(r=>r.storage==='其他')?[['其他','其他']]:[])];
+  document.getElementById('stChips').innerHTML=chips.map(([k,l])=>`<span class="filter-chip ${_stFilter===k?'active':''}" style="margin-right:0" onclick="_stFilter='${k}';stFill()">${l}</span>`).join('');
+  const q=(document.getElementById('stSearch')?.value||'').trim().toLowerCase();
+  let list=rows;
+  if(_stFilter==='diff') list=list.filter(r=>r.diff!==null&&r.diff!==0||r.notInErp);
+  else if(_stFilter==='todo') list=list.filter(r=>r.qty===null);
+  else if(_stFilter!=='all') list=list.filter(r=>r.storage===_stFilter);
+  if(q) list=list.filter(r=>(r.code+' '+r.name+' '+r.spec).toLowerCase().includes(q));
+  const today=twDateStr(), d30=stAddDays(today,30), d60=stAddDays(today,60);
+  const th='padding:7px 8px;background:var(--teal);color:#fff;font-size:0.75rem;white-space:nowrap;position:sticky;top:0;';
+  const td='padding:7px 8px;border-bottom:1px solid var(--admin-border);font-size:0.8rem;vertical-align:top;';
+  document.getElementById('stTable').innerHTML=!list.length?'<div style="text-align:center;color:var(--text3);padding:24px;font-size:0.85rem;">沒有符合的品項</div>':`
+    <div style="overflow-x:auto;border:1px solid var(--admin-border);border-radius:10px;max-height:65vh;overflow-y:auto;">
+    <table style="border-collapse:collapse;width:100%;min-width:640px;">
+      <thead><tr><th style="${th}text-align:left">品項</th><th style="${th}">週四帳面</th><th style="${th}">實盤</th><th style="${th}">差異</th><th style="${th}">週四已撿待出</th><th style="${th}">最近效期</th><th style="${th}">盤點人</th></tr></thead>
+      <tbody>${list.map(r=>{
+        const dc=r.diff===null?'':r.diff>0?'color:#2e7d32;font-weight:800':r.diff<0?'color:#C62828;font-weight:800':'color:#999';
+        const ec=!r.exp?'':r.exp<=d30?'color:#C62828;font-weight:800':r.exp<=d60?'color:#c47f00;font-weight:700':'';
+        return `<tr style="${r.qty===null?'background:#fffdf5':''}">
+          <td style="${td}"><b>${escHtml(r.name)}</b>${r.extra?' <span style="color:#c47f00;font-size:0.7rem">（App清單外）</span>':''}${r.notInErp?' <span style="color:#C62828;font-size:0.7rem">（ERP無帳）</span>':''}<br><span style="color:var(--text2);font-size:0.72rem">${r.noCode?'（無編碼）':escHtml(r.code)}${r.spec?'｜'+escHtml(r.spec):''}｜${r.storage}</span>${r.note?`<br><span style="font-size:0.72rem;color:#7a4b00">📝 ${escHtml(r.note)}</span>`:''}</td>
+          <td style="${td}text-align:right">${r.book===null?'<span style="color:#bbb">—</span>':stQ(r.book)}</td>
+          <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}</td>
+          <td style="${td}text-align:right;${dc}">${r.diff===null?'':(r.diff>0?'+':'')+stQ(r.diff)}</td>
+          <td style="${td}text-align:right">${r.picked?stQ(r.picked):''}</td>
+          <td style="${td}white-space:nowrap;${ec}">${escHtml(r.exp)}</td>
+          <td style="${td}white-space:nowrap;font-size:0.74rem">${escHtml(r.by)}${r.at?`<br><span style="color:var(--text3)">${escHtml(r.at.slice(11,16))}</span>`:''}</td>
+        </tr>`; }).join('')}</tbody>
+    </table></div>
+    <div style="font-size:0.72rem;color:var(--text3);margin-top:6px;line-height:1.6;">差異＝實盤－週四帳面（＋盤盈／－盤虧）。「週四已撿待出」只是參考：週四帳面已經扣掉這些，若差異剛好等於它，可能是撿好的貨被一起盤進去了。效期 30 天內紅字、60 天內橘字。</div>`;
+}
+
+/* ── 動作 ── */
+async function stRequestBook(month,baseDate){
+  await db.collection('cp_stocktake').doc(month).update({book:{state:'requested',baseDate,message:'已送出請求，等送單電腦處理…',at:stNowStr()}});
+  await db.collection('cp_data').doc('stock_request').set({requestedAt:Date.now(),month,baseDate,by:getAdminRole()});
+}
+let _stLastReq=0;
+async function stStart(){
+  const cd=document.getElementById('stCountDate').value, bd=document.getElementById('stBaseDate').value;
+  if(!cd||!bd) return alert('請填寫盤點日和帳面基準日');
+  if(bd<cd) return alert('帳面基準日不能早於盤點日');
+  const month=cd.slice(0,7).replace('-','');
+  const checks=stChecks(cd,bd), fails=checks.filter(c=>c.lv==='fail'), warns=checks.filter(c=>c.lv==='warn');
+  const strip=s=>s.replace(/<[^>]+>/g,'');
+  if(fails.length){
+    if(!confirm('以下檢查沒通過：\n\n'+fails.map(c=>'❌ '+c.t+'\n   '+strip(c.d)).join('\n')+'\n\n建議先處理再開始。仍要開始盤點嗎？')) return;
+  } else if(!confirm(`開始 ${month.slice(0,4)}/${month.slice(4)} 盤點？\n盤點日 ${stMD(cd)}、帳面基準日 ${stMD(bd)}`+(warns.length?'\n\n'+warns.map(c=>'⚠️ '+strip(c.d)).join('\n'):''))) return;
+  const ex=_stDocs[month];
+  if(ex&&ex.status==='counting') { _stSel=month; renderStocktake(); return alert('這個月已經在盤點中'); }
+  if(ex&&!confirm(`${month} 已經有一份盤點紀錄（${Object.keys(ex.counts||{}).length} 筆）。\n重新開始會「清空」原本的盤點數字，確定嗎？\n（只想繼續原本那份，請按取消，再選該月份按「重新開啟」）`)) return;
+  const ref=db.collection('cp_stocktake').doc(month);
+  try{
+    await db.runTransaction(async tx=>{
+      const sn=await tx.get(ref);
+      if(sn.exists&&sn.data().status==='counting') throw new Error('這個月已經在盤點中');
+      tx.set(ref,{month,countDate:cd,baseDate:bd,wh:'100',status:'counting',startedAt:stNowStr(),startedBy:getAdminRole(),
+        counts:{},book:{},checks:checks.map(c=>({lv:c.lv,t:c.t,d:strip(c.d)}))});
+    });
+    _stSel=month; _stFilter='all';
+    await stRequestBook(month,bd); _stLastReq=Date.now();
+    renderStocktake();
+    alert('已開始盤點！倉管現在可以用手機輸入了。\n帳面數會在送單電腦查完 Ecount 後自動出現。');
+  }catch(e){ alert('開始盤點失敗：'+(e.code==='permission-denied'?'Firestore 規則還沒加 cp_stocktake / cp_data/stock_request':(e.message||e.code))); }
+}
+async function stRefetch(){
+  const doc=_stDocs[_stSel]; if(!doc) return;
+  if(Date.now()-_stLastReq<60*1000) return alert('剛剛才抓過，請 1 分鐘後再按（Ecount 庫存查詢有次數限制）');
+  if(['requested','waiting','running'].includes((doc.book||{}).state)&&!confirm('上一次還在處理中，確定要再送一次？')) return;
+  if(!stErpOnline()&&!confirm('送單電腦目前離線，要等它上線才會查。仍要送出請求嗎？')) return;
+  try{ _stLastReq=Date.now(); await stRequestBook(_stSel,doc.baseDate); }
+  catch(e){ alert('送出失敗：'+(e.message||e.code)); }
+}
+async function stChangeBase(){
+  const doc=_stDocs[_stSel]; if(!doc) return;
+  const v=prompt('帳面基準日（YYYY-MM-DD）',doc.baseDate); if(!v||v===doc.baseDate) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return alert('日期格式不對，例：2026-11-12');
+  try{
+    await db.collection('cp_stocktake').doc(_stSel).update({baseDate:v});
+    if(confirm('已改成 '+stMD(v)+'。要現在重新抓這天的帳面嗎？')){ _stLastReq=0; _stDocs[_stSel].baseDate=v; stRefetch(); }
+  }catch(e){ alert('修改失敗：'+(e.message||e.code)); }
+}
+async function stClose(){
+  const doc=_stDocs[_stSel]; if(!doc) return;
+  const rows=stRows(doc), todo=rows.filter(r=>r.qty===null), todoBook=todo.filter(r=>r.book);
+  if(!confirm(`結束 ${_stSel} 盤點？\n\n已盤 ${rows.length-todo.length} / ${rows.length}`+(todoBook.length?`\n⚠️ 還有 ${todoBook.length} 項帳面有數量但沒盤`:'')+'\n\n結束後倉管手機就不能再修改。')) return;
+  try{ await db.collection('cp_stocktake').doc(_stSel).update({status:'closed',closedAt:stNowStr(),closedBy:getAdminRole(),picked:stPicked(doc.baseDate)}); }
+  catch(e){ alert('結束失敗：'+(e.message||e.code)); }
+}
+async function stReopen(){
+  if(isLimited()) return;
+  if(Object.entries(_stDocs).some(([k,v])=>k!==_stSel&&v.status==='counting')) return alert('另一個月份還在盤點中，請先結束那一份');
+  if(!confirm('重新開啟 '+_stSel+' 盤點？倉管手機可以繼續修改。')) return;
+  try{ await db.collection('cp_stocktake').doc(_stSel).update({status:'counting'}); }catch(e){ alert('失敗：'+(e.message||e.code)); }
+}
+async function stSavePin(){
+  const pin=document.getElementById('stPin').value.trim();
+  if(!/^\d{4,8}$/.test(pin)) return alert('PIN 請輸入 4～8 位數字');
+  try{
+    await db.collection('cp_data').doc('config').set({data:{stocktakePin:pin}},{merge:true});
+    _CACHE.config={...(_CACHE.config||{}),stocktakePin:pin};
+    alert('✓ 倉管 PIN 已儲存');
+  }catch(e){ alert('儲存失敗：'+(e.message||e.code)); }
+}
+function stExport(){
+  const doc=_stDocs[_stSel]; if(!doc) return;
+  const rows=stRows(doc), counted=rows.filter(r=>r.qty!==null);
+  if(!counted.length) return alert('還沒有任何盤點數字');
+  if(!(doc.book&&doc.book.state==='done')&&!confirm('還沒有抓到 Ecount 帳面，差異欄會是空的。仍要匯出嗎？')) return;
+  const ymd=doc.baseDate.replace(/-/g,'');
+  const upload=[['日期','序號','倉庫','品項編碼','品項名稱','規格','數量','備註']];
+  counted.filter(r=>!r.noCode).forEach(r=>upload.push([ymd,1,doc.wh||'100',r.code,r.name,r.spec,r.qty,[r.exp?'效期'+r.exp:'',r.note].filter(Boolean).join(' ')]));
+  const detail=[['品項編碼','品項名稱','規格','單位','存放','週四帳面','實盤','差異','週四已撿待出','最近效期','盤點人','盤點時間','備註','說明']];
+  rows.forEach(r=>detail.push([r.noCode?'':r.code,r.name,r.spec,r.unit,r.storage,r.book===null?'':r.book,r.qty===null?'':r.qty,r.diff===null?'':r.diff,r.picked||'',r.exp,r.by,r.at,r.note,
+    [r.qty===null?'未盤':'',r.extra?'App清單外':'',r.notInErp?'ERP無帳':'',r.noCode?'無編碼':'',r.prev?`原 ${r.prev.qty}（${r.prev.by}）`:''].filter(Boolean).join('、')]));
+  const noCode=counted.filter(r=>r.noCode);
+  const info=[['橙沛 '+_stSel+' 盤點'],[],['盤點日',doc.countDate],['帳面基準日（Ecount 盤點日期）',doc.baseDate],['倉庫',doc.wh||'100'],
+    ['帳面抓取',doc.book&&doc.book.fetchedAt||'未抓'],['已盤',`${counted.length} / ${rows.length}`],[],
+    ['「盤點輸入」工作表：每個已盤品項一行，數量＝實盤數，日期＝帳面基準日。'],
+    ['上傳前請對照 Ecount「盤點輸入」的上傳格式欄位順序，必要時調整欄位。'],
+    ['未盤的品項不會出現在上傳表，Ecount 不會調整它們。'],
+    ...(noCode.length?[[`⚠️ ${noCode.length} 項清單外品項沒有編碼，沒放進上傳表：`+noCode.map(r=>r.name).join('、')]]:[])];
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.aoa_to_sheet(upload); ws1['!cols']=[{wch:10},{wch:5},{wch:6},{wch:14},{wch:24},{wch:16},{wch:8},{wch:24}];
+  const ws2=XLSX.utils.aoa_to_sheet(detail); ws2['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:6},{wch:9},{wch:8},{wch:8},{wch:10},{wch:11},{wch:8},{wch:17},{wch:20},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws1,'盤點輸入');
+  XLSX.utils.book_append_sheet(wb,ws2,'差異明細');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(info),'說明');
+  XLSX.writeFile(wb,`橙沛盤點_${_stSel}_基準${ymd}.xlsx`);
+}
+</script>
 </body>
 </html>

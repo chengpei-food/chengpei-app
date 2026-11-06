@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="橙沛盤點">
+<meta name="theme-color" content="#007787">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>橙沛 倉庫盤點</title>
+<style>
+:root{
+  --teal:#007787;--teal-dark:#005f6e;--teal-light:#2BB7B3;--teal-bg:#E6F4F5;
+  --yellow:#F5A200;--card:#F5F9FA;--border:#D8E8EA;
+  --text:#1A1A1A;--text2:#5A7A7D;--text3:#9ABABD;--red:#C62828;--green:#2E7D32;
+  --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;background:#fff;color:var(--text);font-size:16px;}
+.hidden{display:none!important;}
+/* header */
+.hdr{position:sticky;top:0;z-index:20;background:var(--teal);color:#fff;padding:calc(10px + var(--safe-top)) 14px 10px;}
+.hdr-row{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.hdr-title{font-size:1.05rem;font-weight:800;}
+.hdr-sub{font-size:0.75rem;opacity:.8;margin-top:2px;}
+.hdr-btn{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:16px;padding:6px 12px;font-size:0.8rem;}
+.progress{height:6px;background:rgba(255,255,255,.25);border-radius:3px;margin-top:8px;overflow:hidden;}
+.progress>div{height:100%;background:var(--yellow);width:0;transition:width .3s;}
+.stripe{height:3px;background:linear-gradient(90deg,#F5A200 0%,#F8B616 40%,#2BB7B3 100%);}
+/* login */
+.login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:#F0F7F8;}
+.login h1{color:var(--teal);font-size:1.4rem;margin-bottom:4px;}
+.login p{color:var(--text2);font-size:0.85rem;margin-bottom:22px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px 20px;width:100%;max-width:360px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:0.78rem;font-weight:700;color:var(--teal);margin-bottom:6px;}
+.field input,.field textarea{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:1rem;font-family:inherit;background:#fff;outline:none;color:var(--text);}
+.field input:focus,.field textarea:focus{border-color:var(--teal);}
+.btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:1rem;font-weight:800;cursor:pointer;background:var(--teal);color:#fff;}
+.btn:active{background:var(--teal-dark);}
+.btn.ghost{background:#fff;color:var(--text2);border:1.5px solid var(--border);}
+.btn.danger{background:#fff;color:var(--red);border:1.5px solid #FFCDD2;}
+.err{color:var(--red);font-size:0.85rem;text-align:center;margin-top:10px;min-height:1.2em;}
+/* tabs & filters */
+.bar{position:sticky;z-index:15;background:#fff;border-bottom:1px solid var(--border);}
+.tabs{display:flex;}
+.tabs button{flex:1;padding:12px 4px;border:none;background:none;font-size:0.95rem;font-weight:700;color:var(--text2);border-bottom:3px solid transparent;}
+.tabs button.on{color:var(--teal);border-bottom-color:var(--teal);}
+.tabs .cnt{display:block;font-size:0.7rem;font-weight:600;color:var(--text3);margin-top:2px;}
+.tools{display:flex;gap:8px;padding:8px 12px;align-items:center;}
+.tools input{flex:1;min-width:0;padding:9px 12px;border:1.5px solid var(--border);border-radius:20px;font-size:0.95rem;outline:none;}
+.chip{padding:7px 12px;border-radius:16px;border:1.5px solid var(--border);background:#fff;font-size:0.82rem;font-weight:700;color:var(--text2);white-space:nowrap;}
+.chip.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+/* list */
+.list{padding:8px 12px calc(90px + var(--safe-bottom));}
+.item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 13px;margin-bottom:8px;cursor:pointer;}
+.item:active{background:var(--teal-bg);}
+.item.done{background:#F1F8F1;border-color:#C8E6C9;}
+.item-main{flex:1;min-width:0;}
+.item-name{font-weight:700;font-size:0.98rem;line-height:1.35;}
+.item-meta{font-size:0.75rem;color:var(--text2);margin-top:3px;}
+.item-who{font-size:0.72rem;color:var(--text3);margin-top:2px;}
+.item-qty{text-align:right;flex-shrink:0;}
+.item-qty b{font-size:1.25rem;color:var(--green);}
+.item-qty small{display:block;font-size:0.72rem;color:var(--text2);}
+.todo{font-size:0.82rem;font-weight:700;color:#c47f00;background:#FEF3DC;border-radius:10px;padding:4px 10px;}
+.empty{text-align:center;color:var(--text3);padding:40px 10px;font-size:0.9rem;line-height:1.7;}
+.fab{position:fixed;right:16px;bottom:calc(18px + var(--safe-bottom));z-index:25;background:var(--yellow);color:#fff;border:none;border-radius:26px;padding:13px 18px;font-size:0.92rem;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.18);}
+/* sheet */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:flex-end;justify-content:center;}
+.sheet{background:#fff;width:100%;max-width:520px;border-radius:20px 20px 0 0;padding:18px 18px calc(18px + var(--safe-bottom));max-height:92dvh;overflow-y:auto;}
+.sheet h2{font-size:1.08rem;line-height:1.4;}
+.sheet .meta{font-size:0.8rem;color:var(--text2);margin:4px 0 14px;}
+.qty-row{display:flex;align-items:center;gap:8px;}
+.qty-row input{font-size:1.6rem;font-weight:800;text-align:center;padding:10px;}
+.qty-row .unit{font-size:1rem;font-weight:700;color:var(--text2);min-width:2.5em;}
+.step{width:52px;height:52px;border-radius:12px;border:1.5px solid var(--border);background:#fff;font-size:1.5rem;font-weight:700;color:var(--teal);flex-shrink:0;}
+.prev{font-size:0.78rem;color:var(--text2);background:var(--teal-bg);border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.5;}
+.btns{display:flex;gap:8px;margin-top:6px;}
+.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-bottom));transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;padding:10px 18px;border-radius:20px;font-size:0.9rem;z-index:99;max-width:90vw;text-align:center;}
+.toast.bad{background:var(--red);}
+.banner{background:#fdecea;color:var(--red);font-size:0.85rem;font-weight:700;padding:8px 14px;text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- 登入 -->
+<div class="login" id="loginView">
+  <h1>📦 倉庫盤點</h1>
+  <p>橙沛食品｜100 總倉</p>
+  <div class="card">
+    <div class="field"><label>盤點人姓名</label><input id="whoInput" placeholder="例：王小明" autocomplete="name"></div>
+    <div class="field"><label>倉管 PIN</label><input id="pinInput" type="password" inputmode="numeric" placeholder="請輸入 PIN" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn" onclick="doLogin()">開始盤點</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- 主畫面 -->
+<div id="mainView" class="hidden">
+  <div class="hdr" id="hdr">
+    <div class="hdr-row">
+      <div>
+        <div class="hdr-title" id="hdrTitle">倉庫盤點</div>
+        <div class="hdr-sub" id="hdrSub">連線中…</div>
+      </div>
+      <button class="hdr-btn" onclick="logout()">登出</button>
+    </div>
+    <div class="progress"><div id="progBar"></div></div>
+  </div>
+  <div class="stripe"></div>
+  <div class="banner hidden" id="netBanner">⚠️ 雲端連線中斷，輸入的數字可能存不進去</div>
+  <div id="noSession" class="empty hidden"></div>
+  <div id="countArea" class="hidden">
+    <div class="bar" id="bar">
+      <div class="tabs" id="tabs"></div>
+      <div class="tools">
+        <input id="searchInput" type="search" placeholder="🔍 搜尋品名或編碼" oninput="render()">
+        <button class="chip" id="chipTodo" onclick="toggleTodo()">只看未盤</button>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+    <button class="fab" onclick="openExtra()">＋ 清單外品項</button>
+  </div>
+</div>
+
+<!-- 輸入面板 -->
+<div class="mask hidden" id="mask" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet" id="sheet"></div>
+</div>
+<div class="toast hidden" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+/* ══════════════════════════════════════════════
+   橙沛 倉庫盤點（倉管手機用）
+   - 盲盤：這個頁面不顯示 ERP 帳面數
+   - 每筆輸入都用 transaction 即時存到 cp_stocktake/{YYYYMM}.counts.{品項編碼}
+   ══════════════════════════════════════════════ */
+const STORAGES=['常溫','冷藏','冷凍'];
+let db=null, _authReady=Promise.resolve();
+try{
+  if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  db=firebase.firestore();
+  if(typeof firebase.auth==='function'){
+    _authReady=Promise.race([firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e)),new Promise(r=>setTimeout(r,5000))]);
+  }
+}catch(e){ console.warn('Firebase 初始化失敗',e); }
+
+const ls={get(k){try{return localStorage.getItem(k);}catch(e){return null;}},set(k,v){try{localStorage.setItem(k,v);}catch(e){}}};
+const ss={get(k){try{return sessionStorage.getItem(k);}catch(e){return null;}},set(k,v){try{sessionStorage.setItem(k,v);}catch(e){}},del(k){try{sessionStorage.removeItem(k);}catch(e){}}};
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function twNowStr(){
+  const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date()).map(x=>[x.type,x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour==='24'?'00':p.hour}:${p.minute}:${p.second}`;
+}
+function md(ymd){ if(!ymd) return ''; const d=new Date(ymd+'T00:00:00'); return (d.getMonth()+1)+'/'+d.getDate()+'（週'+'日一二三四五六'[d.getDay()]+'）'; }
+function toast(msg,bad){ const t=document.getElementById('toast'); t.textContent=msg; t.className='toast'+(bad?' bad':''); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.add('hidden'),bad?4000:1600); }
+const fmtQ=q=>String(Math.round(Number(q)*1000)/1000);
+
+/* ── 登入 ── */
+let ME='';
+document.getElementById('whoInput').value=ls.get('cp_st_who')||'';
+async function doLogin(){
+  const who=document.getElementById('whoInput').value.trim();
+  const pin=document.getElementById('pinInput').value.trim();
+  const err=document.getElementById('loginErr'); err.textContent='';
+  if(!who) return err.textContent='請輸入盤點人姓名';
+  if(!pin) return err.textContent='請輸入 PIN';
+  if(!db) return err.textContent='無法連線雲端，請確認網路';
+  err.textContent='確認中…';
+  try{
+    await _authReady;
+    const sn=await db.collection('cp_data').doc('config').get();
+    const real=String(((sn.exists&&sn.data().data)||{}).stocktakePin||'');
+    if(!real){ err.textContent='後台還沒設定倉管 PIN，請管理員到後台「盤點」分頁設定'; return; }
+    if(pin!==real){ err.textContent='PIN 錯誤'; return; }
+  }catch(e){ err.textContent='連線失敗，請稍後再試（'+(e.code||e.message)+'）'; return; }
+  ls.set('cp_st_who',who); ss.set('cp_st_ok','1'); ss.set('cp_st_me',who);
+  enterMain(who);
+}
+function logout(){ ss.del('cp_st_ok'); location.reload(); }
+function enterMain(who){
+  ME=who;
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('mainView').classList.remove('hidden');
+  _authReady.then(startListeners); // 先完成匿名登入再讀資料（規則要求登入）
+}
+
+/* ── 資料 ── */
+let PRODUCTS=[], ST=null, ST_ID='', TAB=ss.get('cp_st_tab')||'常溫', ONLY_TODO=false, _listening=false;
+function startListeners(){
+  if(_listening) return; _listening=true;
+  db.collection('cp_data').doc('products').onSnapshot(sn=>{
+    PRODUCTS=(sn.exists&&sn.data().data)||[]; render();
+  },e=>netWarn(true,e));
+  db.collection('cp_stocktake').where('status','==','counting').onSnapshot(qs=>{
+    netWarn(false);
+    let best=null;
+    qs.forEach(doc=>{ if(!best||doc.id>best.id) best=doc; });
+    if(!best){ ST=null; ST_ID=''; showNoSession(); return; }
+    ST_ID=best.id; ST=best.data();
+    document.getElementById('noSession').classList.add('hidden');
+    document.getElementById('countArea').classList.remove('hidden');
+    render();
+  },e=>netWarn(true,e));
+}
+function netWarn(on,e){ if(e) console.warn(e); document.getElementById('netBanner').classList.toggle('hidden',!on); }
+function showNoSession(){
+  document.getElementById('countArea').classList.add('hidden');
+  const el=document.getElementById('noSession'); el.classList.remove('hidden');
+  el.innerHTML='目前沒有進行中的盤點<br>請等管理員在後台按「開始盤點」<br><span style="font-size:.8rem">（開始後這個畫面會自動出現清單）</span>';
+  document.getElementById('hdrTitle').textContent='倉庫盤點';
+  document.getElementById('hdrSub').textContent=ME+'｜等待開始';
+  document.getElementById('progBar').style.width='0';
+}
+function counts(){ return (ST&&ST.counts)||{}; }
+function storageOf(p){ return STORAGES.includes(p.storage)?p.storage:'其他'; }
+// 盤點清單：上架＋售完的品項，加上已經有人盤過的（含清單外）
+function allItems(){
+  const c=counts(), seen=new Set(), out=[];
+  PRODUCTS.forEach(p=>{
+    if(!p.code) return;
+    if(p.status==='NO'&&!c[p.code]) return;
+    seen.add(p.code);
+    out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p)});
+  });
+  Object.entries(c).forEach(([code,v])=>{
+    if(seen.has(code)) return;
+    out.push({code,name:v.name||code,spec:v.spec||'',unit:v.unit||'',storage:STORAGES.includes(v.storage)?v.storage:'其他',extra:true,noCode:!!v.noCode});
+  });
+  return out;
+}
+
+/* ── 畫面 ── */
+function render(){
+  if(!ST) return;
+  const items=allItems(), c=counts();
+  const done=items.filter(i=>c[i.code]).length;
+  document.getElementById('hdrTitle').textContent=`${ST_ID.slice(0,4)}年${+ST_ID.slice(4,6)}月 盤點`;
+  document.getElementById('hdrSub').textContent=`${ME}｜盤點日 ${md(ST.countDate)}｜已盤 ${done} / ${items.length}`;
+  document.getElementById('progBar').style.width=(items.length?done/items.length*100:0)+'%';
+  const tabs=[...STORAGES]; if(items.some(i=>i.storage==='其他')) tabs.push('其他');
+  if(!tabs.includes(TAB)) TAB=tabs[0];
+  document.getElementById('tabs').innerHTML=tabs.map(t=>{
+    const all=items.filter(i=>i.storage===t), d=all.filter(i=>c[i.code]).length;
+    return `<button class="${t===TAB?'on':''}" onclick="setTab('${t}')">${t}<span class="cnt">${d} / ${all.length}</span></button>`;
+  }).join('');
+  document.getElementById('bar').style.top=document.getElementById('hdr').offsetHeight+3+'px';
+  document.getElementById('chipTodo').classList.toggle('on',ONLY_TODO);
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  let list=items.filter(i=>i.storage===TAB);
+  if(q) list=items.filter(i=>(i.name+' '+i.code+' '+i.spec).toLowerCase().includes(q)); // 搜尋時跨分頁
+  if(ONLY_TODO) list=list.filter(i=>!c[i.code]);
+  list.sort((a,b)=>a.code.localeCompare(b.code));
+  const el=document.getElementById('list');
+  if(!list.length){ el.innerHTML=`<div class="empty">${ONLY_TODO?'🎉 這一區都盤完了':'沒有符合的品項'}</div>`; return; }
+  el.innerHTML=list.map(i=>{
+    const v=c[i.code];
+    return `<div class="item${v?' done':''}" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
+      <div class="item-main">
+        <div class="item-name">${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
+        <div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}${q?'｜'+esc(i.storage):''}</div>
+        ${v?`<div class="item-who">${esc(v.by)} ${esc((v.at||'').slice(11,16))}${v.exp?'｜效期 '+esc(v.exp):''}${v.note?'｜📝':''}</div>`:''}
+      </div>
+      <div class="item-qty">${v?`<b>${esc(fmtQ(v.qty))}</b><small>${esc(i.unit)}</small>`:'<span class="todo">未盤</span>'}</div>
+    </div>`;
+  }).join('');
+}
+function setTab(t){ TAB=t; ss.set('cp_st_tab',t); document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
+function toggleTodo(){ ONLY_TODO=!ONLY_TODO; render(); }
+
+/* ── 輸入面板 ── */
+let CUR=null;
+function openItem(code){
+  const it=allItems().find(i=>i.code===code); if(!it) return;
+  CUR=it; const v=counts()[code];
+  document.getElementById('sheet').innerHTML=`
+    <h2>${esc(it.name)}</h2>
+    <div class="meta">${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}</div>
+    ${v?`<div class="prev">已盤：<b>${esc(fmtQ(v.qty))} ${esc(it.unit)}</b>（${esc(v.by)} ${esc((v.at||'').slice(5,16))}）${v.prev?`<br>改過：原本 ${esc(fmtQ(v.prev.qty))}（${esc(v.prev.by)}）`:''}</div>`:''}
+    <div class="field"><label>實盤數量</label>
+      <div class="qty-row">
+        <button class="step" type="button" onclick="bump(-1)">−</button>
+        <input id="fQty" type="number" inputmode="decimal" step="any" min="0" value="${v?esc(fmtQ(v.qty)):''}" placeholder="0">
+        <button class="step" type="button" onclick="bump(1)">＋</button>
+        <span class="unit">${esc(it.unit)}</span>
+      </div>
+    </div>
+    <div class="field"><label>最近效期（選填）</label><input id="fExp" type="date" value="${v&&v.exp?esc(v.exp):''}"></div>
+    <div class="field"><label>備註（選填）</label><input id="fNote" value="${v&&v.note?esc(v.note):''}" placeholder="例：外箱破損 2 箱"></div>
+    <div class="btns">
+      <button class="btn ghost" style="flex:1" onclick="closeSheet()">取消</button>
+      <button class="btn" style="flex:2" id="saveBtn" onclick="saveCur()">儲存</button>
+    </div>
+    ${v?`<button class="btn danger" style="margin-top:10px" onclick="clearCur()">清除這筆（改回未盤）</button>`:''}`;
+  document.getElementById('mask').classList.remove('hidden');
+  setTimeout(()=>{ const q=document.getElementById('fQty'); q.focus(); q.select&&q.select(); },120);
+}
+function bump(n){ const q=document.getElementById('fQty'); const v=Math.max(0,(Number(q.value)||0)+n); q.value=fmtQ(v); }
+function closeSheet(){ document.getElementById('mask').classList.add('hidden'); CUR=null; }
+
+async function txWrite(code,value){
+  if(!ST_ID) throw new Error('目前沒有進行中的盤點');
+  const ref=db.collection('cp_stocktake').doc(ST_ID);
+  const fp=new firebase.firestore.FieldPath('counts',code);
+  await db.runTransaction(async tx=>{
+    const sn=await tx.get(ref);
+    if(!sn.exists) throw new Error('找不到這次盤點');
+    const d=sn.data();
+    if(d.status!=='counting') throw new Error('盤點已結束，不能再修改');
+    if(value===null){ tx.update(ref,fp,firebase.firestore.FieldValue.delete()); return; }
+    const prev=(d.counts||{})[code];
+    if(prev&&prev.by!==ME&&Number(prev.qty)!==Number(value.qty)) value.prev={qty:prev.qty,by:prev.by,at:prev.at};
+    else if(prev&&prev.prev) value.prev=prev.prev;
+    tx.update(ref,fp,value);
+  });
+}
+async function saveCur(){
+  if(!CUR) return;
+  const raw=document.getElementById('fQty').value.trim();
+  if(raw===''){ toast('請輸入數量（沒有就填 0）',true); return; }
+  const qty=Number(raw);
+  if(!isFinite(qty)||qty<0){ toast('數量不正確',true); return; }
+  const val={qty:Math.round(qty*1000)/1000,exp:document.getElementById('fExp').value||'',note:document.getElementById('fNote').value.trim(),by:ME,at:twNowStr(),ts:Date.now()};
+  if(CUR.extra){ Object.assign(val,{name:CUR.name,spec:CUR.spec,unit:CUR.unit,storage:CUR.storage,extra:true,noCode:!!CUR.noCode}); }
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='儲存中…';
+  try{ await txWrite(CUR.code,val); toast('✓ 已存：'+CUR.name+' '+fmtQ(val.qty)+' '+CUR.unit); closeSheet(); }
+  catch(e){ console.warn(e); toast('⚠️ 沒存到：'+(e.message||e.code)+'，請再按一次',true); btn.disabled=false; btn.textContent='儲存'; }
+}
+async function clearCur(){
+  if(!CUR||!confirm('確定清除「'+CUR.name+'」的盤點數字？')) return;
+  try{ await txWrite(CUR.code,null); toast('已清除'); closeSheet(); }
+  catch(e){ toast('⚠️ 清除失敗：'+(e.message||e.code),true); }
+}
+
+/* ── 清單外品項 ── */
+function openExtra(){
+  document.getElementById('sheet').innerHTML=`
+    <h2>＋ 清單外品項</h2>
+    <div class="meta">App 品項清單裡找不到、但倉庫裡有的東西</div>
+    <div class="field"><label>品名 *</label><input id="xName"></div>
+    <div class="field"><label>Ecount 品項編碼（知道的話）</label><input id="xCode" autocapitalize="characters"></div>
+    <div class="field"><label>規格／單位</label><div style="display:flex;gap:8px"><input id="xSpec" placeholder="規格" style="flex:2"><input id="xUnit" placeholder="單位" style="flex:1"></div></div>
+    <div class="field"><label>存放</label><div style="display:flex;gap:6px">${STORAGES.map(s=>`<button type="button" class="chip${s===TAB?' on':''}" onclick="this.parentNode.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));this.classList.add('on')" data-s="${s}">${s}</button>`).join('')}</div></div>
+    <div class="btns"><button class="btn ghost" style="flex:1" onclick="closeSheet()">取消</button><button class="btn" style="flex:2" onclick="nextExtra()">下一步：輸入數量</button></div>`;
+  document.getElementById('mask').classList.remove('hidden');
+}
+function nextExtra(){
+  const name=document.getElementById('xName').value.trim(); if(!name) return toast('請輸入品名',true);
+  let code=document.getElementById('xCode').value.trim().toUpperCase();
+  const storage=(document.querySelector('#sheet .chip.on')||{}).dataset?.s||'常溫';
+  const exists=allItems().find(i=>i.code===code);
+  if(code&&exists&&!exists.extra){ closeSheet(); openItem(code); toast('這個編碼已在清單裡，直接輸入數量'); return; }
+  const noCode=!code;
+  if(noCode) code='X-'+Date.now().toString(36).toUpperCase();
+  CUR={code,name,spec:document.getElementById('xSpec').value.trim(),unit:document.getElementById('xUnit').value.trim(),storage,extra:true,noCode};
+  const it=CUR;
+  document.getElementById('sheet').innerHTML=`
+    <h2>${esc(it.name)}（清單外）</h2><div class="meta">${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}</div>
+    <div class="field"><label>實盤數量</label><div class="qty-row"><button class="step" type="button" onclick="bump(-1)">−</button><input id="fQty" type="number" inputmode="decimal" step="any" min="0" placeholder="0"><button class="step" type="button" onclick="bump(1)">＋</button><span class="unit">${esc(it.unit)}</span></div></div>
+    <div class="field"><label>最近效期（選填）</label><input id="fExp" type="date"></div>
+    <div class="field"><label>備註（選填）</label><input id="fNote"></div>
+    <div class="btns"><button class="btn ghost" style="flex:1" onclick="closeSheet()">取消</button><button class="btn" style="flex:2" id="saveBtn" onclick="saveCur()">儲存</button></div>`;
+  setTimeout(()=>document.getElementById('fQty').focus(),120);
+}
+
+/* ── 啟動 ── */
+if(ss.get('cp_st_ok')==='1'&&ss.get('cp_st_me')) enterMain(ss.get('cp_st_me'));
+window.addEventListener('online',()=>netWarn(false));
+window.addEventListener('offline',()=>netWarn(true));
+</script>
+</body>
+</html>
