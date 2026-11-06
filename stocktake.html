@@ -81,6 +81,12 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .btns{display:flex;gap:8px;margin-top:6px;}
 .toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-bottom));transform:translateX(-50%);background:rgba(0,0,0,.82);color:#fff;padding:10px 18px;border-radius:20px;font-size:0.9rem;z-index:99;max-width:90vw;text-align:center;}
 .toast.bad{background:var(--red);}
+.rc-banner{margin:8px 12px 0;background:#fdecea;color:#C62828;border:1.5px solid #FFCDD2;border-radius:12px;padding:11px 14px;font-weight:800;font-size:0.92rem;cursor:pointer;}
+.rc-banner.on{background:#C62828;color:#fff;}
+.item.rc{background:#fff5f5;border-color:#EF9A9A;border-width:2px;}
+.rcbadge{font-size:0.82rem;font-weight:800;color:#fff;background:#C62828;border-radius:10px;padding:4px 10px;}
+.tabs .rcdot{color:#C62828;font-weight:800;}
+.rc-note{background:#fdecea;color:#C62828;border-radius:8px;padding:9px 11px;margin-bottom:12px;font-size:0.85rem;font-weight:700;line-height:1.5;}
 .banner{background:#fdecea;color:var(--red);font-size:0.85rem;font-weight:700;padding:8px 14px;text-align:center;}
 </style>
 </head>
@@ -121,6 +127,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
         <button class="chip" id="chipTodo" onclick="toggleTodo()">只看未盤</button>
       </div>
     </div>
+    <div id="rcBanner"></div>
     <div class="list" id="list"></div>
     <button class="fab" onclick="openExtra()">＋ 清單外品項</button>
   </div>
@@ -193,7 +200,7 @@ function enterMain(who){
 }
 
 /* ── 資料 ── */
-let PRODUCTS=[], ST=null, ST_ID='', TAB=ss.get('cp_st_tab')||'常溫', ONLY_TODO=false, _listening=false;
+let RC_VIEW=false, PRODUCTS=[], ST=null, ST_ID='', TAB=ss.get('cp_st_tab')||'常溫', ONLY_TODO=false, _listening=false;
 function startListeners(){
   if(_listening) return; _listening=true;
   db.collection('cp_data').doc('products').onSnapshot(sn=>{
@@ -220,6 +227,7 @@ function showNoSession(){
   document.getElementById('progBar').style.width='0';
 }
 function counts(){ return (ST&&ST.counts)||{}; }
+function recounts(){ return (ST&&ST.recount)||{}; }
 function storageOf(p){ return STORAGES.includes(p.storage)?p.storage:'其他'; }
 // 盤點清單：上架＋售完的品項，加上已經有人盤過的（含清單外）
 function allItems(){
@@ -240,7 +248,10 @@ function allItems(){
 /* ── 畫面 ── */
 function render(){
   if(!ST) return;
-  const items=allItems(), c=counts();
+  const items=allItems(), c=counts(), rc=recounts();
+  const rcItems=items.filter(i=>rc[i.code]);
+  if(!rcItems.length) RC_VIEW=false;
+  document.getElementById('rcBanner').innerHTML=rcItems.length?`<div class="rc-banner${RC_VIEW?' on':''}" onclick="toggleRc()">🔁 後台請你重盤 ${rcItems.length} 項${RC_VIEW?'（點這裡回到全部）':'（點這裡查看）'}</div>`:'';
   const done=items.filter(i=>c[i.code]).length;
   document.getElementById('hdrTitle').textContent=`${ST_ID.slice(0,4)}年${+ST_ID.slice(4,6)}月 盤點`;
   document.getElementById('hdrSub').textContent=`${ME}｜盤點日 ${md(ST.countDate)}｜已盤 ${done} / ${items.length}`;
@@ -249,12 +260,13 @@ function render(){
   if(!tabs.includes(TAB)) TAB=tabs[0];
   document.getElementById('tabs').innerHTML=tabs.map(t=>{
     const all=items.filter(i=>i.storage===t), d=all.filter(i=>c[i.code]).length;
-    return `<button class="${t===TAB?'on':''}" onclick="setTab('${t}')">${t}<span class="cnt">${d} / ${all.length}</span></button>`;
+    const r=all.filter(i=>rc[i.code]).length;
+    return `<button class="${t===TAB&&!RC_VIEW?'on':''}" onclick="setTab('${t}')">${t}<span class="cnt">${d} / ${all.length}${r?` <span class="rcdot">🔁${r}</span>`:''}</span></button>`;
   }).join('');
   document.getElementById('bar').style.top=document.getElementById('hdr').offsetHeight+3+'px';
   document.getElementById('chipTodo').classList.toggle('on',ONLY_TODO);
   const q=document.getElementById('searchInput').value.trim().toLowerCase();
-  let list=items.filter(i=>i.storage===TAB);
+  let list=RC_VIEW?rcItems:items.filter(i=>i.storage===TAB);
   if(q) list=items.filter(i=>(i.name+' '+i.code+' '+i.spec).toLowerCase().includes(q)); // 搜尋時跨分頁
   if(ONLY_TODO) list=list.filter(i=>!c[i.code]);
   list.sort((a,b)=>a.code.localeCompare(b.code));
@@ -262,6 +274,9 @@ function render(){
   if(!list.length){ el.innerHTML=`<div class="empty">${ONLY_TODO?'🎉 這一區都盤完了':'沒有符合的品項'}</div>`; return; }
   el.innerHTML=list.map(i=>{
     const v=c[i.code];
+    if(rc[i.code]) return `<div class="item rc" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
+      <div class="item-main"><div class="item-name">${esc(i.name)}</div><div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}｜${esc(i.storage)}</div></div>
+      <div class="item-qty"><span class="rcbadge">🔁 請重盤</span></div></div>`;
     return `<div class="item${v?' done':''}" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
       <div class="item-main">
         <div class="item-name">${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
@@ -272,17 +287,19 @@ function render(){
     </div>`;
   }).join('');
 }
-function setTab(t){ TAB=t; ss.set('cp_st_tab',t); document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
+function toggleRc(){ RC_VIEW=!RC_VIEW; document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
+function setTab(t){ RC_VIEW=false; TAB=t; ss.set('cp_st_tab',t); document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
 function toggleTodo(){ ONLY_TODO=!ONLY_TODO; render(); }
 
 /* ── 輸入面板 ── */
 let CUR=null;
 function openItem(code){
   const it=allItems().find(i=>i.code===code); if(!it) return;
-  CUR=it; const v=counts()[code];
+  CUR=it; const isRc=!!recounts()[code]; const v=isRc?null:counts()[code];
   document.getElementById('sheet').innerHTML=`
     <h2>${esc(it.name)}</h2>
     <div class="meta">${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}</div>
+    ${isRc?`<div class="rc-note">🔁 後台請你再盤一次這一項，請重新數過後輸入</div>`:''}
     ${v?`<div class="prev">已盤：<b>${esc(fmtQ(v.qty))} ${esc(it.unit)}</b>（${esc(v.by)} ${esc((v.at||'').slice(5,16))}）${v.prev?`<br>改過：原本 ${esc(fmtQ(v.prev.qty))}（${esc(v.prev.by)}）`:''}</div>`:''}
     <div class="field"><label>實盤數量</label>
       <div class="qty-row">
@@ -316,9 +333,13 @@ async function txWrite(code,value){
     if(d.status!=='counting') throw new Error('盤點已結束，不能再修改');
     if(value===null){ tx.update(ref,fp,firebase.firestore.FieldValue.delete()); return; }
     const prev=(d.counts||{})[code];
-    if(prev&&prev.by!==ME&&Number(prev.qty)!==Number(value.qty)) value.prev={qty:prev.qty,by:prev.by,at:prev.at};
+    const isRc=!!(d.recount||{})[code];
+    if(isRc){ value.recounted=true; if(prev) value.prev={qty:prev.qty,by:prev.by,at:prev.at}; }
+    else if(prev&&prev.by!==ME&&Number(prev.qty)!==Number(value.qty)) value.prev={qty:prev.qty,by:prev.by,at:prev.at};
     else if(prev&&prev.prev) value.prev=prev.prev;
-    tx.update(ref,fp,value);
+    if(!isRc&&prev&&prev.recounted) value.recounted=true;
+    if(isRc) tx.update(ref,fp,value,new firebase.firestore.FieldPath('recount',code),firebase.firestore.FieldValue.delete());
+    else tx.update(ref,fp,value);
   });
 }
 async function saveCur(){

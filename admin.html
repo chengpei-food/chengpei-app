@@ -2251,7 +2251,7 @@ function renderStocktake(){
   if(!db){ document.getElementById('stocktakeBody').innerHTML='<div class="empty-state">目前無法連線雲端</div>'; return; }
   stStartListener();
   const doc=_stSel?_stDocs[_stSel]:null;
-  const key=(_stSel||'new')+'|'+(doc?doc.status:'new');
+  const key=(_stSel||'new')+'|'+(doc?doc.status:'new')+'|'+Object.keys(_stDocs).sort().map(k=>k+_stDocs[k].status).join(','); // 月份清單變了也要重畫下拉選單
   if(key!==_stShellKey||!document.getElementById('stMain')){ _stShellKey=key; document.getElementById('stocktakeBody').innerHTML=stShell(doc); }
   stFill();
 }
@@ -2282,9 +2282,10 @@ function stShell(doc){
       <div id="stWarn"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">
         ${doc.status==='counting'?`<button class="export-btn" style="background:var(--teal)" onclick="stRefetch()">🔄 重新抓帳面</button>
-        <button class="export-btn" style="background:var(--teal-light)" onclick="stChangeBase()">📅 改基準日</button>`:''}
+        <button class="export-btn" style="background:var(--teal-light)" onclick="stChangeBase()">📅 改基準日</button>
+        <button class="export-btn" style="background:#8e24aa" onclick="stRecountAllDiff()">🔁 有差異的全部請重盤</button>`:''}
         <button class="export-btn" onclick="stExport()">📥 匯出 Ecount 盤點 Excel</button>
-        ${doc.status==='counting'?`<button class="export-btn" style="background:#C62828" onclick="stClose()">✅ 結束盤點</button>`:`<button class="export-btn super-only" style="background:#777" onclick="stReopen()">↩️ 重新開啟</button>`}
+        ${doc.status==='counting'?`<button class="export-btn" style="background:#C62828" onclick="stClose()">✅ 結束盤點</button>`:`<button class="export-btn" style="background:#777" onclick="stReopen()">↩️ 重新開啟</button>`}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;" id="stChips"></div>
       <input id="stSearch" type="search" placeholder="🔍 搜尋品名或編碼" oninput="stFill()" style="width:100%;${inp}margin-bottom:8px;">
@@ -2294,7 +2295,7 @@ function stShell(doc){
     <div id="stErr"></div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">${sel}</div>
     <div id="stMain">${main}</div>
-    <div class="super-only">
+    <div>
       <div class="sec-title" style="margin-top:28px;">倉管手機設定</div>
       <div class="settings-card" style="padding:14px;">
         <div style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">倉管用手機打開下面網址，輸入姓名＋PIN 就能盤點（看不到帳面數）</div>
@@ -2359,7 +2360,8 @@ function stRows(doc){
       storage:ST_STORAGES.includes(p.storage)?p.storage:(c&&ST_STORAGES.includes(c.storage)?c.storage:'其他'),
       book:bq,qty,diff:(qty!==null&&bq!==null)?Math.round((qty-bq)*1000)/1000:null,picked:picked[code]||0,
       exp:c?c.exp||'':'',by:c?c.by||'':'',at:c?c.at||'':'',note:c?c.note||'':'',prev:c?c.prev||null:null,
-      extra:!pmap[code],noCode:!!(c&&c.noCode),notInErp:!!book&&!b&&qty!==null};
+      extra:!pmap[code],noCode:!!(c&&c.noCode),notInErp:!!book&&!b&&qty!==null,
+      recount:!!(doc.recount||{})[code],recounted:!!(c&&c.recounted)};
   }).sort((a,b)=>ST_STORAGES.concat('其他').indexOf(a.storage)-ST_STORAGES.concat('其他').indexOf(b.storage)||a.code.localeCompare(b.code));
 }
 
@@ -2383,7 +2385,7 @@ function stFill(){
       盤點日 ${stMD(doc.countDate)}｜帳面基準日 <b>${stMD(doc.baseDate)}</b>｜倉庫 ${escHtml(doc.wh||'100')}<br>
       開始 ${escHtml((doc.startedAt||'').slice(5,16))}${doc.closedAt?`｜結束 ${escHtml(doc.closedAt.slice(5,16))}`:''}${counters.length?`｜盤點人：${counters.map(escHtml).join('、')}`:''}<br>
       ${bookTxt}<br>
-      <b>已盤 ${counted.length} / ${rows.length}</b>｜有差異 <b style="color:#C62828">${diffs.length}</b> 項｜未盤但帳面有數 ${todoBook.length} 項
+      <b>已盤 ${counted.length} / ${rows.length}</b>｜有差異 <b style="color:#C62828">${diffs.length}</b> 項｜未盤但帳面有數 ${todoBook.length} 項${rows.some(r=>r.recount)?`｜🔁 請重盤中 <b style="color:#C62828">${rows.filter(r=>r.recount).length}</b> 項`:''}
     </div>`;
   // 警告
   const warns=[];
@@ -2398,12 +2400,13 @@ function stFill(){
   }
   document.getElementById('stWarn').innerHTML=warns.map(w=>`<div style="background:#fff4e5;border-radius:10px;padding:9px 12px;margin-top:8px;font-size:0.8rem;line-height:1.55;">⚠️ ${w}</div>`).join('');
   // 篩選
-  const chips=[['all','全部'],['diff','有差異'],['todo','未盤'],...ST_STORAGES.map(s=>[s,s]),...(rows.some(r=>r.storage==='其他')?[['其他','其他']]:[])];
+  const chips=[['all','全部'],['diff','有差異'],['todo','未盤'],['recount','🔁 請重盤'],...ST_STORAGES.map(s=>[s,s]),...(rows.some(r=>r.storage==='其他')?[['其他','其他']]:[])];
   document.getElementById('stChips').innerHTML=chips.map(([k,l])=>`<span class="filter-chip ${_stFilter===k?'active':''}" style="margin-right:0" onclick="_stFilter='${k}';stFill()">${l}</span>`).join('');
   const q=(document.getElementById('stSearch')?.value||'').trim().toLowerCase();
   let list=rows;
   if(_stFilter==='diff') list=list.filter(r=>r.diff!==null&&r.diff!==0||r.notInErp);
   else if(_stFilter==='todo') list=list.filter(r=>r.qty===null);
+  else if(_stFilter==='recount') list=list.filter(r=>r.recount);
   else if(_stFilter!=='all') list=list.filter(r=>r.storage===_stFilter);
   if(q) list=list.filter(r=>(r.code+' '+r.name+' '+r.spec).toLowerCase().includes(q));
   const today=twDateStr(), d30=stAddDays(today,30), d60=stAddDays(today,60);
@@ -2419,14 +2422,14 @@ function stFill(){
         return `<tr style="${r.qty===null?'background:#fffdf5':''}">
           <td style="${td}"><b>${escHtml(r.name)}</b>${r.extra?' <span style="color:#c47f00;font-size:0.7rem">（App清單外）</span>':''}${r.notInErp?' <span style="color:#C62828;font-size:0.7rem">（ERP無帳）</span>':''}<br><span style="color:var(--text2);font-size:0.72rem">${r.noCode?'（無編碼）':escHtml(r.code)}${r.spec?'｜'+escHtml(r.spec):''}｜${r.storage}</span>${r.note?`<br><span style="font-size:0.72rem;color:#7a4b00">📝 ${escHtml(r.note)}</span>`:''}</td>
           <td style="${td}text-align:right">${r.book===null?'<span style="color:#bbb">—</span>':stQ(r.book)}</td>
-          <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}</td>
+          <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}${r.recount?'<br><span style="font-size:0.7rem;color:#C62828;font-weight:800">🔁 請重盤中</span>':r.recounted?'<br><span style="font-size:0.7rem;color:#2e7d32;font-weight:700">✔ 已重盤</span>':''}</td>
           <td style="${td}text-align:right;${dc}">${r.diff===null?'':(r.diff>0?'+':'')+stQ(r.diff)}</td>
           <td style="${td}text-align:right">${r.picked?stQ(r.picked):''}</td>
           <td style="${td}white-space:nowrap;${ec}">${escHtml(r.exp)}</td>
-          <td style="${td}white-space:nowrap;font-size:0.74rem">${escHtml(r.by)}${r.at?`<br><span style="color:var(--text3)">${escHtml(r.at.slice(11,16))}</span>`:''}</td>
+          <td style="${td}white-space:nowrap;font-size:0.74rem">${escHtml(r.by)}${r.at?`<br><span style="color:var(--text3)">${escHtml(r.at.slice(11,16))}</span>`:''}${doc.status==='counting'&&r.qty!==null?`<br><button data-code="${escHtml(r.code)}" onclick="stToggleRecount(this.dataset.code)" style="margin-top:4px;border:1.5px solid ${r.recount?'#999':'#C62828'};background:#fff;color:${r.recount?'#777':'#C62828'};border-radius:6px;padding:2px 6px;font-size:0.7rem;font-weight:700;cursor:pointer;">${r.recount?'取消重盤':'🔁 請重盤'}</button>`:''}</td>
         </tr>`; }).join('')}</tbody>
     </table></div>
-    <div style="font-size:0.72rem;color:var(--text3);margin-top:6px;line-height:1.6;">差異＝實盤－週四帳面（＋盤盈／－盤虧）。「週四已撿待出」只是參考：週四帳面已經扣掉這些，若差異剛好等於它，可能是撿好的貨被一起盤進去了。效期 30 天內紅字、60 天內橘字。</div>`;
+    <div style="font-size:0.72rem;color:var(--text3);margin-top:6px;line-height:1.6;">差異＝實盤－週四帳面（＋盤盈／－盤虧）。「週四已撿待出」只是參考：週四帳面已經扣掉這些，若差異剛好等於它，可能是撿好的貨被一起盤進去了。效期 30 天內紅字、60 天內橘字。按「🔁 請重盤」後，倉管手機上那一項會標紅色「請重盤」（一樣看不到帳面），重新輸入後自動變成「✔ 已重盤」。</div>`;
 }
 
 /* ── 動作 ── */
@@ -2487,10 +2490,28 @@ async function stClose(){
   catch(e){ alert('結束失敗：'+(e.message||e.code)); }
 }
 async function stReopen(){
-  if(isLimited()) return;
   if(Object.entries(_stDocs).some(([k,v])=>k!==_stSel&&v.status==='counting')) return alert('另一個月份還在盤點中，請先結束那一份');
   if(!confirm('重新開啟 '+_stSel+' 盤點？倉管手機可以繼續修改。')) return;
   try{ await db.collection('cp_stocktake').doc(_stSel).update({status:'counting'}); }catch(e){ alert('失敗：'+(e.message||e.code)); }
+}
+async function stToggleRecount(code){
+  const doc=_stDocs[_stSel]; if(!doc||doc.status!=='counting') return;
+  const on=!(doc.recount||{})[code];
+  try{
+    await db.collection('cp_stocktake').doc(_stSel).update(new firebase.firestore.FieldPath('recount',code),
+      on?{by:getAdminRole(),at:stNowStr()}:firebase.firestore.FieldValue.delete());
+  }catch(e){ alert('設定失敗：'+(e.message||e.code)); }
+}
+async function stRecountAllDiff(){
+  const doc=_stDocs[_stSel]; if(!doc||doc.status!=='counting') return;
+  if(!(doc.book&&doc.book.state==='done')) return alert('還沒有帳面數，無法判斷差異');
+  const list=stRows(doc).filter(r=>r.diff!==null&&r.diff!==0&&!r.recount);
+  if(!list.length) return alert('目前沒有需要重盤的差異品項');
+  if(!confirm(`把 ${list.length} 項有差異的品項全部標成「請重盤」？\n`+list.slice(0,15).map(r=>'・'+r.name+'（差 '+(r.diff>0?'+':'')+stQ(r.diff)+'）').join('\n')+(list.length>15?'\n…':''))) return;
+  const args=[]; const v={by:getAdminRole(),at:stNowStr()};
+  list.forEach(r=>{ args.push(new firebase.firestore.FieldPath('recount',r.code),v); });
+  try{ await db.collection('cp_stocktake').doc(_stSel).update(...args); }
+  catch(e){ alert('設定失敗：'+(e.message||e.code)); }
 }
 async function stSavePin(){
   const pin=document.getElementById('stPin').value.trim();
@@ -2511,7 +2532,7 @@ function stExport(){
   counted.filter(r=>!r.noCode).forEach(r=>upload.push([ymd,1,doc.wh||'100',r.code,r.name,r.spec,r.qty,[r.exp?'效期'+r.exp:'',r.note].filter(Boolean).join(' ')]));
   const detail=[['品項編碼','品項名稱','規格','單位','存放','週四帳面','實盤','差異','週四已撿待出','最近效期','盤點人','盤點時間','備註','說明']];
   rows.forEach(r=>detail.push([r.noCode?'':r.code,r.name,r.spec,r.unit,r.storage,r.book===null?'':r.book,r.qty===null?'':r.qty,r.diff===null?'':r.diff,r.picked||'',r.exp,r.by,r.at,r.note,
-    [r.qty===null?'未盤':'',r.extra?'App清單外':'',r.notInErp?'ERP無帳':'',r.noCode?'無編碼':'',r.prev?`原 ${r.prev.qty}（${r.prev.by}）`:''].filter(Boolean).join('、')]));
+    [r.qty===null?'未盤':'',r.recount?'請重盤中':r.recounted?'已重盤':'',r.extra?'App清單外':'',r.notInErp?'ERP無帳':'',r.noCode?'無編碼':'',r.prev?`原 ${r.prev.qty}（${r.prev.by}）`:''].filter(Boolean).join('、')]));
   const noCode=counted.filter(r=>r.noCode);
   const info=[['橙沛 '+_stSel+' 盤點'],[],['盤點日',doc.countDate],['帳面基準日（Ecount 盤點日期）',doc.baseDate],['倉庫',doc.wh||'100'],
     ['帳面抓取',doc.book&&doc.book.fetchedAt||'未抓'],['已盤',`${counted.length} / ${rows.length}`],[],
