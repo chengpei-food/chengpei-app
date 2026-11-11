@@ -241,7 +241,7 @@ function allItems(){
   const c=counts(), seen=new Set(), out=[];
   PRODUCTS.forEach(p=>{
     if(!p.code) return;
-    if(p.status==='NO'&&!c[p.code]) return;
+    if(p.status==='NO'&&!p.forceCount&&!c[p.code]) return; // forceCount：下架但仍要盤（例：BE003M 和 BE003S 輪替）
     if(skipCount(p)&&!c[p.code]) return;
     seen.add(p.code);
     out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p),loc:p.loc||''});

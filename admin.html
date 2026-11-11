@@ -284,7 +284,7 @@ input:checked + .slider:before{transform:translateX(20px);}
             <option value="常溫">常溫</option><option value="冷藏">冷藏</option><option value="冷凍">冷凍</option>
           </select>
         </div>
-        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label></div>
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-forcecount" style="accent-color:#007787;"> 下架也要盤（客戶看不到，但倉庫有貨）</label></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">分類 *</label>
           <select id="pf-category" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;">
             <option value="肉品食材">🥩 肉品食材</option>
@@ -1375,7 +1375,7 @@ function prodCard(p){
         <button onclick="deleteProd('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #e53935;border-radius:8px;background:white;color:#e53935;cursor:pointer;font-weight:600;">刪除</button>
       </div>
     </div>
-    <div class="pm-spec">${p.loc?`<b style="color:var(--teal);">📍${escHtml(p.loc)}</b> · `:''}${stSkipCount(p)?'<span style="color:#999;">🚫不盤</span> · ':''}${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
+    <div class="pm-spec">${p.loc?`<b style="color:var(--teal);">📍${escHtml(p.loc)}</b> · `:''}${stSkipCount(p)?'<span style="color:#999;">🚫不盤</span> · ':''}${p.status==='NO'&&p.forceCount?'<span style="color:#8e24aa;">📋下架仍盤</span> · ':''}${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
     <div class="pm-foot">
       <div class="pm-price-wrap super-only">
         <span class="pm-price-label">售價</span>
@@ -1420,6 +1420,7 @@ function openProdForm(code){
     document.getElementById('pf-storage').value=p.storage||'常溫';
     document.getElementById('pf-loc').value=p.loc||'';
     document.getElementById('pf-nocount').checked=!!p.noCount;
+    document.getElementById('pf-forcecount').checked=!!p.forceCount;
     document.getElementById('pf-category').value=p.category||'未分類';
   } else {
     // 新增模式
@@ -1432,6 +1433,7 @@ function openProdForm(code){
     document.getElementById('pf-code-hint').textContent='';
     ['pf-name','pf-unit','pf-spec','pf-step','pf-weekly','pf-price','pf-loc'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('pf-nocount').checked=false;
+    document.getElementById('pf-forcecount').checked=false;
     document.getElementById('pf-storage').value='常溫';
     document.getElementById('pf-category').value='未分類';
   }
@@ -1457,6 +1459,7 @@ function saveProd(){
   const storage=document.getElementById('pf-storage').value;
   const loc=document.getElementById('pf-loc').value.trim().toUpperCase();
   const noCount=document.getElementById('pf-nocount').checked;
+  const forceCount=document.getElementById('pf-forcecount').checked;
   const category=document.getElementById('pf-category').value;
   const errEl=document.getElementById('prodFormErr');
   const showErr=msg=>{errEl.textContent=msg;errEl.style.display='block';errEl.scrollIntoView({behavior:'smooth',block:'nearest'});};
@@ -1474,6 +1477,7 @@ function saveProd(){
     if(weeklyVal>0) p.weeklyLimit=weeklyVal; else delete p.weeklyLimit;
     if(loc) p.loc=loc; else delete p.loc;
     if(noCount) p.noCount=true; else delete p.noCount;
+    if(forceCount) p.forceCount=true; else delete p.forceCount;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
     p.category_display=_selIdx>=0?document.getElementById('pf-category').options[_selIdx].text:category;
   } else {
@@ -1486,6 +1490,7 @@ function saveProd(){
     if(weeklyVal>0) newProd.weeklyLimit=weeklyVal;
     if(loc) newProd.loc=loc;
     if(noCount) newProd.noCount=true;
+    if(forceCount) newProd.forceCount=true;
     prods.push(newProd);
     // 新品項自動加入所有有品項權限清單的客戶
     const custs=getCustomers();
@@ -2363,7 +2368,7 @@ function stRows(doc){
   const codes=new Set();
   // 不用盤的品項（客訂、抹布、勾「盤點時不用盤」）不列入，除非有人盤了
   const skip=c=>pmap[c]&&stSkipCount(pmap[c])&&!counts[c];
-  Object.values(pmap).forEach(p=>{ if(p.status!=='NO') codes.add(p.code); });
+  Object.values(pmap).forEach(p=>{ if(p.status!=='NO'||p.forceCount) codes.add(p.code); }); // forceCount：下架但仍要盤
   Object.keys(counts).forEach(c=>codes.add(c));
   if(book) Object.entries(book).forEach(([c,v])=>{ if(Number(v.q)!==0||pmap[c]) codes.add(c); });
   Object.keys(picked).forEach(c=>codes.add(c));
