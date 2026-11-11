@@ -59,6 +59,11 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .item:active{background:var(--teal-bg);}
 .item.done{background:#F1F8F1;border-color:#C8E6C9;}
 .item-main{flex:1;min-width:0;}
+.loc{display:inline-block;min-width:3.2em;text-align:center;font-size:0.8rem;font-weight:800;color:#fff;background:var(--teal);border-radius:6px;padding:2px 6px;margin-right:6px;vertical-align:1px;}
+.loc.none{background:#ccc;}
+.zone{display:flex;justify-content:space-between;align-items:center;margin:14px 2px 6px;padding:6px 10px;background:var(--teal-bg);border-left:4px solid var(--teal);border-radius:6px;font-weight:800;color:var(--teal);font-size:0.9rem;}
+.zone small{font-weight:600;color:var(--text2);font-size:0.75rem;}
+.list .zone:first-child{margin-top:4px;}
 .item-name{font-weight:700;font-size:0.98rem;line-height:1.35;}
 .item-meta{font-size:0.75rem;color:var(--text2);margin-top:3px;}
 .item-who{font-size:0.72rem;color:var(--text3);margin-top:2px;}
@@ -123,7 +128,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
     <div class="bar" id="bar">
       <div class="tabs" id="tabs"></div>
       <div class="tools">
-        <input id="searchInput" type="search" placeholder="🔍 搜尋品名或編碼" oninput="render()">
+        <input id="searchInput" type="search" placeholder="🔍 搜尋品名、編碼或儲位" oninput="render()">
         <button class="chip" id="chipTodo" onclick="toggleTodo()">只看未盤</button>
       </div>
     </div>
@@ -149,7 +154,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
    - 盲盤：這個頁面不顯示 ERP 帳面數
    - 每筆輸入都用 transaction 即時存到 cp_stocktake/{YYYYMM}.counts.{品項編碼}
    ══════════════════════════════════════════════ */
-const STORAGES=['常溫','冷藏','冷凍'];
+const STORAGES=['常溫','一倉2樓','二倉','冷藏','冷凍']; // 儲位 F 開頭＝一倉二樓、G 開頭＝第二倉庫（乾貨）
 let db=null, _authReady=Promise.resolve();
 try{
   if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
@@ -228,15 +233,18 @@ function showNoSession(){
 }
 function counts(){ return (ST&&ST.counts)||{}; }
 function recounts(){ return (ST&&ST.recount)||{}; }
-function storageOf(p){ return STORAGES.includes(p.storage)?p.storage:'其他'; }
+function storageOf(p){ const L=String(p.loc||''); if(/^F/i.test(L)) return '一倉2樓'; if(/^G/i.test(L)) return '二倉'; return ['常溫','冷藏','冷凍'].includes(p.storage)?p.storage:'其他'; }
 // 盤點清單：上架＋售完的品項，加上已經有人盤過的（含清單外）
+// 不用盤的品項：儲位「客訂」、品名有「抹布」、或後台勾「盤點時不用盤」
+function skipCount(p){ return !!(p.noCount||String(p.loc||'').trim()==='客訂'||/抹布/.test(String(p.name||''))); }
 function allItems(){
   const c=counts(), seen=new Set(), out=[];
   PRODUCTS.forEach(p=>{
     if(!p.code) return;
     if(p.status==='NO'&&!c[p.code]) return;
+    if(skipCount(p)&&!c[p.code]) return;
     seen.add(p.code);
-    out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p)});
+    out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p),loc:p.loc||''});
   });
   Object.entries(c).forEach(([code,v])=>{
     if(seen.has(code)) return;
@@ -245,6 +253,22 @@ function allItems(){
   return out;
 }
 
+// 依儲位排序（A2 排在 A10 前面），沒有儲位的放最後
+function locKey(s){ return String(s||'').toUpperCase().match(/\d+|\D+/g)||[]; }
+function locCmp(a,b){
+  if(!a.loc!==!b.loc) return a.loc?-1:1;
+  const x=locKey(a.loc), y=locKey(b.loc);
+  for(let i=0;i<Math.max(x.length,y.length);i++){
+    if(x[i]===undefined) return -1; if(y[i]===undefined) return 1;
+    const nx=/^\d/.test(x[i]), ny=/^\d/.test(y[i]);
+    if(nx&&ny){ const d=Number(x[i])-Number(y[i]); if(d) return d; continue; }
+    if(nx!==ny) return nx?-1:1;
+    if(x[i]!==y[i]) return x[i]<y[i]?-1:1;
+  }
+  return a.code<b.code?-1:a.code>b.code?1:0;
+}
+// 分區：儲位開頭的英文字母（I、I0、I02、I4 都算 I 區；IA、IB 各自一區）
+function zoneOf(i){ if(!i.loc) return '未設儲位'; const m=String(i.loc).toUpperCase().match(/^[A-Z]+/); return m?m[0]:String(i.loc); }
 /* ── 畫面 ── */
 function render(){
   if(!ST) return;
@@ -267,25 +291,34 @@ function render(){
   document.getElementById('chipTodo').classList.toggle('on',ONLY_TODO);
   const q=document.getElementById('searchInput').value.trim().toLowerCase();
   let list=RC_VIEW?rcItems:items.filter(i=>i.storage===TAB);
-  if(q) list=items.filter(i=>(i.name+' '+i.code+' '+i.spec).toLowerCase().includes(q)); // 搜尋時跨分頁
+  if(q) list=items.filter(i=>(i.name+' '+i.code+' '+i.spec+' '+(i.loc||'')).toLowerCase().includes(q)); // 搜尋時跨分頁
   if(ONLY_TODO) list=list.filter(i=>!c[i.code]);
-  list.sort((a,b)=>a.code.localeCompare(b.code));
+  list.sort(locCmp);
   const el=document.getElementById('list');
   if(!list.length){ el.innerHTML=`<div class="empty">${ONLY_TODO?'🎉 這一區都盤完了':'沒有符合的品項'}</div>`; return; }
+  const zc={}; list.forEach(i=>{ const z=zoneOf(i); zc[z]=zc[z]||[0,0]; zc[z][0]++; if(c[i.code]&&!rc[i.code]) zc[z][1]++; });
+  let lastZone=null;
   el.innerHTML=list.map(i=>{
+    const z=zoneOf(i), head=(!q&&!RC_VIEW&&z!==lastZone)?`<div class="zone">📍 ${esc(z)}${z==='未設儲位'?'':' 區'}<small>已盤 ${zc[z][1]} / ${zc[z][0]}</small></div>`:''; lastZone=z;
+    return head+itemHtml(i);
+  }).join('');
+}
+function itemHtml(i){
+  const c=counts(), rc=recounts(), q=document.getElementById('searchInput').value.trim();
+  {
     const v=c[i.code];
     if(rc[i.code]) return `<div class="item rc" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
-      <div class="item-main"><div class="item-name">${esc(i.name)}</div><div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}｜${esc(i.storage)}</div></div>
+      <div class="item-main"><div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}</div><div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}｜${esc(i.storage)}</div></div>
       <div class="item-qty"><span class="rcbadge">🔁 請重盤</span></div></div>`;
     return `<div class="item${v?' done':''}" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
       <div class="item-main">
-        <div class="item-name">${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
+        <div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
         <div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}${q?'｜'+esc(i.storage):''}</div>
         ${v?`<div class="item-who">${esc(v.by)} ${esc((v.at||'').slice(11,16))}${v.exp?'｜效期 '+esc(v.exp):''}${v.note?'｜📝':''}</div>`:''}
       </div>
       <div class="item-qty">${v?`<b>${esc(fmtQ(v.qty))}</b><small>${esc(i.unit)}</small>`:'<span class="todo">未盤</span>'}</div>
     </div>`;
-  }).join('');
+  }
 }
 function toggleRc(){ RC_VIEW=!RC_VIEW; document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
 function setTab(t){ RC_VIEW=false; TAB=t; ss.set('cp_st_tab',t); document.getElementById('searchInput').value=''; render(); window.scrollTo(0,0); }
@@ -298,7 +331,7 @@ function openItem(code){
   CUR=it; const isRc=!!recounts()[code]; const v=isRc?null:counts()[code];
   document.getElementById('sheet').innerHTML=`
     <h2>${esc(it.name)}</h2>
-    <div class="meta">${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}</div>
+    <div class="meta">${it.loc?'📍'+esc(it.loc)+'｜':''}${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}</div>
     ${isRc?`<div class="rc-note">🔁 後台請你再盤一次這一項，請重新數過後輸入</div>`:''}
     ${v?`<div class="prev">已盤：<b>${esc(fmtQ(v.qty))} ${esc(it.unit)}</b>（${esc(v.by)} ${esc((v.at||'').slice(5,16))}）${v.prev?`<br>改過：原本 ${esc(fmtQ(v.prev.qty))}（${esc(v.prev.by)}）`:''}</div>`:''}
     <div class="field"><label>實盤數量</label>

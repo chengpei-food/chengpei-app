@@ -256,6 +256,7 @@ input:checked + .slider:before{transform:translateX(20px);}
   <!-- PRODUCTS -->
   <div class="screen" id="screen-products">
     <div class="super-only" style="padding:10px 13px 0;display:flex;justify-content:flex-end;flex-shrink:0;">
+      <label style="background:#fff;color:var(--teal);border:1.5px solid var(--teal);border-radius:12px;padding:7px 14px;font-size:0.85rem;font-weight:700;cursor:pointer;margin-right:8px;">📍 匯入儲位<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importLocations(this)"></label>
       <button onclick="openProdForm(null)" id="addProdBtn" style="background:var(--teal);color:white;border:none;border-radius:12px;padding:8px 18px;font-size:0.88rem;font-weight:700;cursor:pointer;">＋ 新增品項</button>
     </div>
     <!-- 新增／編輯品項表單 -->
@@ -283,6 +284,7 @@ input:checked + .slider:before{transform:translateX(20px);}
             <option value="常溫">常溫</option><option value="冷藏">冷藏</option><option value="冷凍">冷凍</option>
           </select>
         </div>
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">分類 *</label>
           <select id="pf-category" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;">
             <option value="肉品食材">🥩 肉品食材</option>
@@ -1373,7 +1375,7 @@ function prodCard(p){
         <button onclick="deleteProd('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #e53935;border-radius:8px;background:white;color:#e53935;cursor:pointer;font-weight:600;">刪除</button>
       </div>
     </div>
-    <div class="pm-spec">${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
+    <div class="pm-spec">${p.loc?`<b style="color:var(--teal);">📍${escHtml(p.loc)}</b> · `:''}${stSkipCount(p)?'<span style="color:#999;">🚫不盤</span> · ':''}${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
     <div class="pm-foot">
       <div class="pm-price-wrap super-only">
         <span class="pm-price-label">售價</span>
@@ -1416,6 +1418,8 @@ function openProdForm(code){
     document.getElementById('pf-weekly').value=(p.weeklyLimit>0)?p.weeklyLimit:'';
     document.getElementById('pf-price').value=(p.price!=null)?p.price:'';
     document.getElementById('pf-storage').value=p.storage||'常溫';
+    document.getElementById('pf-loc').value=p.loc||'';
+    document.getElementById('pf-nocount').checked=!!p.noCount;
     document.getElementById('pf-category').value=p.category||'未分類';
   } else {
     // 新增模式
@@ -1426,7 +1430,8 @@ function openProdForm(code){
     document.getElementById('pf-code').style.background='white';
     document.getElementById('pf-code').style.color='#1A1A1A';
     document.getElementById('pf-code-hint').textContent='';
-    ['pf-name','pf-unit','pf-spec','pf-step','pf-weekly','pf-price'].forEach(id=>document.getElementById(id).value='');
+    ['pf-name','pf-unit','pf-spec','pf-step','pf-weekly','pf-price','pf-loc'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('pf-nocount').checked=false;
     document.getElementById('pf-storage').value='常溫';
     document.getElementById('pf-category').value='未分類';
   }
@@ -1450,6 +1455,8 @@ function saveProd(){
   const stepVal=parseInt(document.getElementById('pf-step').value)||1;
   const weeklyVal=parseInt(document.getElementById('pf-weekly').value)||0;
   const storage=document.getElementById('pf-storage').value;
+  const loc=document.getElementById('pf-loc').value.trim().toUpperCase();
+  const noCount=document.getElementById('pf-nocount').checked;
   const category=document.getElementById('pf-category').value;
   const errEl=document.getElementById('prodFormErr');
   const showErr=msg=>{errEl.textContent=msg;errEl.style.display='block';errEl.scrollIntoView({behavior:'smooth',block:'nearest'});};
@@ -1465,6 +1472,8 @@ function saveProd(){
     if(!p) return;
     p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category; if(stepVal>1) p.step=stepVal; else delete p.step;
     if(weeklyVal>0) p.weeklyLimit=weeklyVal; else delete p.weeklyLimit;
+    if(loc) p.loc=loc; else delete p.loc;
+    if(noCount) p.noCount=true; else delete p.noCount;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
     p.category_display=_selIdx>=0?document.getElementById('pf-category').options[_selIdx].text:category;
   } else {
@@ -1475,6 +1484,8 @@ function saveProd(){
     const newProd={code:inputCode,name,spec,unit,price,category,storage,category_display:catDisplay,status:'YES'};
     if(stepVal>1) newProd.step=stepVal;
     if(weeklyVal>0) newProd.weeklyLimit=weeklyVal;
+    if(loc) newProd.loc=loc;
+    if(noCount) newProd.noCount=true;
     prods.push(newProd);
     // 新品項自動加入所有有品項權限清單的客戶
     const custs=getCustomers();
@@ -2211,7 +2222,7 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').cat
    - 帳面數由送單程式查 Ecount 庫存後寫入 book（基準日預設＝盤點日＋1，週四）
    ══════════════════════════════════════════════════════ */
 let _stDocs={}, _stListening=false, _stSel=null, _stShellKey='', _stFilter='all', _stErr='';
-const ST_STORAGES=['常溫','冷藏','冷凍'];
+const ST_STORAGES=['常溫','一倉2樓','二倉','冷藏','冷凍']; // 儲位 F 開頭＝一倉二樓、G 開頭＝第二倉庫
 function stAddDays(ymd,n){ const d=new Date(ymd+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 function stMD(ymd){ if(!ymd) return ''; const d=new Date(ymd+'T00:00:00Z'); return (d.getUTCMonth()+1)+'/'+d.getUTCDate()+'（週'+'日一二三四五六'[d.getUTCDay()]+'）'; }
 function stNowStr(){ return twISOString().replace('T',' '); }
@@ -2226,6 +2237,7 @@ function stDeliv(o){
 function stErpOnline(){ const st=_erpStatus; return !!(st&&st.heartbeat&&Date.now()-st.heartbeat<3*60*1000&&st.online!==false); }
 function stBaseOrders(baseDate){ return getOrders().filter(o=>stDeliv(o)===baseDate&&o.status!=='rejected'); }
 // 週四已撿待出：到貨日＝基準日、沒被拒絕的訂單，依品項加總
+function stSkipCount(p){ return !!(p.noCount||String(p.loc||'').trim()==='客訂'||/抹布/.test(String(p.name||''))); }
 function stPicked(baseDate){
   const m={};
   stBaseOrders(baseDate).forEach(o=>(o.items||[]).forEach(it=>{ if(!it.code) return; m[it.code]=Math.round(((m[it.code]||0)+(Number(it.qty)||0))*1000)/1000; }));
@@ -2349,19 +2361,22 @@ function stRows(doc){
   const book=bookDone?doc.book.items:null;
   const picked=doc.status==='counting'?stPicked(doc.baseDate):(doc.picked||stPicked(doc.baseDate));
   const codes=new Set();
+  // 不用盤的品項（客訂、抹布、勾「盤點時不用盤」）不列入，除非有人盤了
+  const skip=c=>pmap[c]&&stSkipCount(pmap[c])&&!counts[c];
   Object.values(pmap).forEach(p=>{ if(p.status!=='NO') codes.add(p.code); });
   Object.keys(counts).forEach(c=>codes.add(c));
   if(book) Object.entries(book).forEach(([c,v])=>{ if(Number(v.q)!==0||pmap[c]) codes.add(c); });
   Object.keys(picked).forEach(c=>codes.add(c));
+  [...codes].forEach(c=>{ if(skip(c)) codes.delete(c); });
   return [...codes].map(code=>{
     const p=pmap[code]||{}, c=counts[code], b=book?book[code]:null;
     const bq=book?(b?Number(b.q)||0:0):null, qty=c?Number(c.qty):null;
     return {code,name:p.name||(c&&c.name)||(b&&b.n)||code,spec:p.spec||(c&&c.spec)||(b&&b.s)||'',unit:p.unit||(c&&c.unit)||'',
-      storage:ST_STORAGES.includes(p.storage)?p.storage:(c&&ST_STORAGES.includes(c.storage)?c.storage:'其他'),
+      storage:/^F/i.test(String(p.loc||''))?'一倉2樓':/^G/i.test(String(p.loc||''))?'二倉':(['常溫','冷藏','冷凍'].includes(p.storage)?p.storage:(c&&ST_STORAGES.includes(c.storage)?c.storage:'其他')),
       book:bq,qty,diff:(qty!==null&&bq!==null)?Math.round((qty-bq)*1000)/1000:null,picked:picked[code]||0,
       exp:c?c.exp||'':'',by:c?c.by||'':'',at:c?c.at||'':'',note:c?c.note||'':'',prev:c?c.prev||null:null,
       extra:!pmap[code],noCode:!!(c&&c.noCode),notInErp:!!book&&!b&&qty!==null,
-      recount:!!(doc.recount||{})[code],recounted:!!(c&&c.recounted)};
+      recount:!!(doc.recount||{})[code],recounted:!!(c&&c.recounted),loc:p.loc||''};
   }).sort((a,b)=>ST_STORAGES.concat('其他').indexOf(a.storage)-ST_STORAGES.concat('其他').indexOf(b.storage)||a.code.localeCompare(b.code));
 }
 
@@ -2408,7 +2423,7 @@ function stFill(){
   else if(_stFilter==='todo') list=list.filter(r=>r.qty===null);
   else if(_stFilter==='recount') list=list.filter(r=>r.recount);
   else if(_stFilter!=='all') list=list.filter(r=>r.storage===_stFilter);
-  if(q) list=list.filter(r=>(r.code+' '+r.name+' '+r.spec).toLowerCase().includes(q));
+  if(q) list=list.filter(r=>(r.code+' '+r.name+' '+r.spec+' '+r.loc).toLowerCase().includes(q));
   const today=twDateStr(), d30=stAddDays(today,30), d60=stAddDays(today,60);
   const th='padding:7px 8px;background:var(--teal);color:#fff;font-size:0.75rem;white-space:nowrap;position:sticky;top:0;';
   const td='padding:7px 8px;border-bottom:1px solid var(--admin-border);font-size:0.8rem;vertical-align:top;';
@@ -2420,7 +2435,7 @@ function stFill(){
         const dc=r.diff===null?'':r.diff>0?'color:#2e7d32;font-weight:800':r.diff<0?'color:#C62828;font-weight:800':'color:#999';
         const ec=!r.exp?'':r.exp<=d30?'color:#C62828;font-weight:800':r.exp<=d60?'color:#c47f00;font-weight:700':'';
         return `<tr style="${r.qty===null?'background:#fffdf5':''}">
-          <td style="${td}"><b>${escHtml(r.name)}</b>${r.extra?' <span style="color:#c47f00;font-size:0.7rem">（App清單外）</span>':''}${r.notInErp?' <span style="color:#C62828;font-size:0.7rem">（ERP無帳）</span>':''}<br><span style="color:var(--text2);font-size:0.72rem">${r.noCode?'（無編碼）':escHtml(r.code)}${r.spec?'｜'+escHtml(r.spec):''}｜${r.storage}</span>${r.note?`<br><span style="font-size:0.72rem;color:#7a4b00">📝 ${escHtml(r.note)}</span>`:''}</td>
+          <td style="${td}"><b>${escHtml(r.name)}</b>${r.extra?' <span style="color:#c47f00;font-size:0.7rem">（App清單外）</span>':''}${r.notInErp?' <span style="color:#C62828;font-size:0.7rem">（ERP無帳）</span>':''}<br><span style="color:var(--text2);font-size:0.72rem">${r.noCode?'（無編碼）':escHtml(r.code)}${r.spec?'｜'+escHtml(r.spec):''}｜${r.storage}${r.loc?'｜📍'+escHtml(r.loc):''}</span>${r.note?`<br><span style="font-size:0.72rem;color:#7a4b00">📝 ${escHtml(r.note)}</span>`:''}</td>
           <td style="${td}text-align:right">${r.book===null?'<span style="color:#bbb">—</span>':stQ(r.book)}</td>
           <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}${r.recount?'<br><span style="font-size:0.7rem;color:#C62828;font-weight:800">🔁 請重盤中</span>':r.recounted?'<br><span style="font-size:0.7rem;color:#2e7d32;font-weight:700">✔ 已重盤</span>':''}</td>
           <td style="${td}text-align:right;${dc}">${r.diff===null?'':(r.diff>0?'+':'')+stQ(r.diff)}</td>
@@ -2513,6 +2528,44 @@ async function stRecountAllDiff(){
   try{ await db.collection('cp_stocktake').doc(_stSel).update(...args); }
   catch(e){ alert('設定失敗：'+(e.message||e.code)); }
 }
+/* ── 匯入儲位：讀 Ecount 匯出的品項 Excel（「品項編碼」＋「摘要(儲位)」欄） ── */
+function importLocations(input){
+  const f=input.files&&input.files[0]; input.value=''; if(!f) return;
+  if(isLimited()) return alert('只有超級管理員可以匯入儲位');
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      const hi=rows.findIndex(r=>r.some(c=>String(c).trim()==='品項編碼'));
+      if(hi<0) return alert('找不到「品項編碼」欄，請用 Ecount 品項清單匯出的 Excel');
+      const H=rows[hi].map(c=>String(c).trim());
+      const ci=H.indexOf('品項編碼'), li=H.findIndex(c=>c.includes('儲位'));
+      if(li<0) return alert('找不到「儲位」欄（例如「摘要(儲位)」）');
+      const map={};
+      rows.slice(hi+1).forEach(r=>{ const c=String(r[ci]||'').trim(); if(!c||c==='品項編碼') return; map[c]=String(r[li]||'').trim().toUpperCase(); });
+      const prods=getProducts(); let changed=0, same=0; const noLoc=[], notInExcel=[];
+      prods.forEach(p=>{
+        if(!(p.code in map)){ notInExcel.push(p.code); return; }
+        const v=map[p.code];
+        if(!v){ noLoc.push(p.code); return; } // Excel 儲位空白：保留 App 原本的儲位，不清掉
+        if((p.loc||'')===v){ same++; return; }
+        p.loc=v; changed++;
+      });
+      const appCodes=new Set(prods.map(p=>p.code));
+      const extra=Object.keys(map).filter(c=>!appCodes.has(c));
+      const msg=`Excel 共 ${Object.keys(map).length} 個品項\n\n要更新儲位：${changed} 項\n儲位沒變：${same} 項`
+        +(noLoc.length?`\nExcel 裡儲位是空白（保留 App 原本的）：${noLoc.length} 項（${noLoc.slice(0,8).join('、')}${noLoc.length>8?'…':''}）`:'')
+        +(notInExcel.length?`\nApp 有、Excel 沒有（不會動）：${notInExcel.length} 項（${notInExcel.slice(0,8).join('、')}${notInExcel.length>8?'…':''}）`:'')
+        +(extra.length?`\nExcel 有、App 沒有（略過）：${extra.length} 項`:'');
+      if(!changed) return alert(msg+'\n\n沒有需要更新的儲位');
+      if(!confirm(msg+'\n\n確定要更新嗎？')) return;
+      saveProducts(prods); renderProducts();
+      alert('✓ 已更新 '+changed+' 項儲位');
+    }catch(err){ alert('讀取 Excel 失敗：'+err.message); }
+  };
+  rd.readAsArrayBuffer(f);
+}
 async function stSavePin(){
   const pin=document.getElementById('stPin').value.trim();
   if(!/^\d{4,8}$/.test(pin)) return alert('PIN 請輸入 4～8 位數字');
@@ -2542,12 +2595,12 @@ function stExport(){
   if(noCode.length) key.push([`⚠️ ${noCode.length} 項清單外品項沒有編碼，請先在 Ecount 找到對應品項：`+noCode.map(r=>r.name+'（實盤 '+stQ(r.qty)+'）').join('、')]);
   if(recountPending.length) key.push([`⚠️ 還有 ${recountPending.length} 項在「請重盤」，數字可能還會變`]);
   if(todoBook.length) key.push([`⚠️ 有 ${todoBook.length} 項帳面有數量但沒盤（不在上面清單，Ecount 不會調整）`]);
-  const detail=[['品項編碼','品項名稱','規格','單位','存放','週四帳面','實盤','差異','週四已撿待出','最近效期','盤點人','盤點時間','備註','說明']];
-  rows.forEach(r=>detail.push([r.noCode?'':r.code,r.name,r.spec,r.unit,r.storage,r.book===null?'':r.book,r.qty===null?'':r.qty,r.diff===null?'':r.diff,r.picked||'',r.exp,r.by,r.at,r.note,
+  const detail=[['品項編碼','品項名稱','規格','單位','存放','儲位','週四帳面','實盤','差異','週四已撿待出','最近效期','盤點人','盤點時間','備註','說明']];
+  rows.forEach(r=>detail.push([r.noCode?'':r.code,r.name,r.spec,r.unit,r.storage,r.loc,r.book===null?'':r.book,r.qty===null?'':r.qty,r.diff===null?'':r.diff,r.picked||'',r.exp,r.by,r.at,r.note,
     [r.qty===null?'未盤':'',r.recount?'請重盤中':r.recounted?'已重盤':'',r.extra?'App清單外':'',r.notInErp?'ERP無帳':'',r.noCode?'無編碼':'',r.prev?`原 ${r.prev.qty}（${r.prev.by}）`:''].filter(Boolean).join('、')]));
   const wb=XLSX.utils.book_new();
   const ws1=XLSX.utils.aoa_to_sheet(key); ws1['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:9},{wch:16},{wch:8},{wch:8},{wch:24}];
-  const ws2=XLSX.utils.aoa_to_sheet(detail); ws2['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:6},{wch:9},{wch:8},{wch:8},{wch:10},{wch:11},{wch:8},{wch:17},{wch:20},{wch:20}];
+  const ws2=XLSX.utils.aoa_to_sheet(detail); ws2['!cols']=[{wch:14},{wch:24},{wch:16},{wch:6},{wch:6},{wch:8},{wch:9},{wch:8},{wch:8},{wch:10},{wch:11},{wch:8},{wch:17},{wch:20},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws1,'Key入清單');
   XLSX.utils.book_append_sheet(wb,ws2,'差異明細');
   XLSX.writeFile(wb,`橙沛盤點_${_stSel}_基準${ymd}.xlsx`);
