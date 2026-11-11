@@ -812,7 +812,7 @@ function renderCheckout(){
 }
 
 /* ── 強制更新：送出前確認是不是最新版 ── */
-const APP_BUILD='b134'; // 每次改這個檔案都要換一個新值
+const APP_BUILD='b136'; // 每次改這個檔案都要換一個新值
 async function isLatestVersion(){
   try{
     const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),5000);
@@ -835,6 +835,33 @@ function pruneUnavailableCart(){
   });
   if(removed.length){ syncAll(); renderProducts(); }
   return removed;
+}
+/* ── 叫貨量提醒：跟「同一個到貨星期幾」的最近幾次比對 ── */
+function getHabitAlerts(deliv){
+  if(!deliv||!currentUser) return [];
+  const DOW=['日','一','二','三','四','五','六'];
+  const dow=new Date(deliv+'T00:00:00').getDay();
+  const mine=getOrders().filter(o=>o.customerId===currentUser.id&&o.status!=='rejected'&&orderDeliv(o));
+  // 過去同一個到貨星期幾的日期（不含這次），取最近 4 次
+  const pastDates=[...new Set(mine.map(orderDeliv).filter(d=>d<deliv&&new Date(d+'T00:00:00').getDay()===dow))].sort().slice(-4);
+  if(pastDates.length<3) return [];   // 資料太少不提醒
+  const sumBy=(dates)=>{ const m={}; mine.filter(o=>dates.includes(orderDeliv(o))).forEach(o=>(o.items||[]).forEach(i=>{ m[i.code]=(m[i.code]||0)+(Number(i.qty)||0); })); return m; };
+  // 這次的量＝同一天已送出的單（追加情況）＋購物車
+  const cur=sumBy([deliv]); Object.values(cart).forEach(i=>{ cur[i.code]=(cur[i.code]||0)+i.qty; });
+  const names={}; mine.forEach(o=>(o.items||[]).forEach(i=>{ names[i.code]={name:i.name,unit:i.unit||''}; })); Object.values(cart).forEach(i=>{ names[i.code]={name:i.name,unit:i.unit||''}; });
+  const per=pastDates.map(d=>sumBy([d]));
+  const prods=getProducts(); const avail=c=>{ const p=prods.find(x=>x.code===c); return p&&p.status!=='NO'&&p.status!=='SOLDOUT'; };
+  const med=a=>{ const b=[...a].sort((x,y)=>x-y), n=b.length; return n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2; };
+  const out=[];
+  const codes=new Set([...per.flatMap(m=>Object.keys(m)),...Object.keys(cur)]);
+  codes.forEach(code=>{
+    const hist=per.map(m=>m[code]||0).filter(q=>q>0);
+    if(hist.length<3) return;                       // 平常不常點的不提醒
+    const m=Math.round(med(hist)*10)/10, c=cur[code]||0, n=names[code]||{name:code,unit:''};
+    if(c===0){ if(avail(code)) out.push({score:1000+m, text:`你星期${DOW[dow]}到貨通常會點「${n.name}」${m} ${n.unit}，這次沒有點`}); return; }
+    if((c>=m*2&&c-m>=2)||(c<=m/2&&m-c>=2)) out.push({score:Math.abs(c-m), text:`你星期${DOW[dow]}到貨通常點「${n.name}」${m} ${n.unit}，這次是 ${c} ${n.unit}`});
+  });
+  return out.sort((a,b)=>b.score-a.score).slice(0,5).map(x=>x.text);
 }
 async function submitOrder(){
   if(!(await isLatestVersion())){
@@ -865,6 +892,8 @@ async function submitOrder(){
   if(!deliveryDate){ alert('請選擇到貨日期'); return; }
   const _wv=getWeeklyViolations(deliveryDate);
   if(_wv.length){ alert('超過每週訂購上限：\n'+weeklyMsg(_wv).replace(/<br>/g,'\n')); renderWeeklyWarn(); return; }
+  const _habit=getHabitAlerts(deliveryDate);
+  if(_habit.length&&!confirm('📋 叫貨量提醒\n\n'+_habit.map(t=>'・'+t).join('\n')+'\n\n按「確定」照樣送出，按「取消」回去修改。')) return;
   order.deliveryDate=deliveryDate;
 
   // 先存到 localStorage（備份）
