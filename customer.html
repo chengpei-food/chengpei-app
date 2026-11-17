@@ -594,7 +594,7 @@ function renderProducts(){
           ${soldOut ? '<span style="font-size:0.75rem;color:#c47f00;font-weight:700;">暫時售完</span>' : `
           <div class="qty-row">
             <button class="q-btn" onclick="adjQty('${p.code}',-1)">−</button>
-            <input class="q-num" type="number" id="qty-${p.code}" value="0" min="0" step="${p.step||1}" onchange="setQtyInput('${p.code}',this.value)">
+            <input class="q-num" type="number" id="qty-${p.code}" value="${inCart?cart[p.code].qty:0}" min="0" step="${p.step||1}" onchange="setQtyInput('${p.code}',this.value)">
             <button class="q-btn" onclick="adjQty('${p.code}',1)">+</button>
             ${p.step>1?`<span style="font-size:0.68rem;color:var(--text3);margin-left:2px;">×${p.step}</span>`:''}
             <span class="prod-unit">/ ${p.unit}</span>
@@ -619,11 +619,10 @@ function addToCart(code){
   if(!p||p.status==='NO'||p.status==='SOLDOUT'){ alert('這個品項目前無法訂購（已下架或售完）'); renderProducts(); return; }
   const q=parseInt(document.getElementById('qty-'+code)?.value)||0;
   if(q<=0) return;
-  cart[code]=cart[code]?{...cart[code],qty:cart[code].qty+q}:{...p,qty:q};
+  // 商品卡上的數字＝購物車裡的數量（已在購物車時直接以這個數字為準，不再累加）
+  cart[code]=cart[code]?{...cart[code],qty:q}:{...p,qty:q};
   const btn=document.getElementById('addbtn-'+code);
   if(btn){btn.textContent='✓ 已加入';btn.classList.add('added');}
-  const el=document.getElementById('qty-'+code);
-  if(el) el.value=0;
   syncAll();
 }
 
@@ -812,7 +811,7 @@ function renderCheckout(){
 }
 
 /* ── 強制更新：送出前確認是不是最新版 ── */
-const APP_BUILD='b137'; // 每次改這個檔案都要換一個新值
+const APP_BUILD='b138'; // 每次改這個檔案都要換一個新值
 async function isLatestVersion(){
   try{
     const ctl=new AbortController(); const t=setTimeout(()=>ctl.abort(),5000);
@@ -1239,6 +1238,7 @@ function goTab(tab){
     const tabEl=document.getElementById('tab-'+t);
     if(tabEl) tabEl.classList.toggle('active',t===tab);
   });
+  if(tab==='catalog') renderProducts(); // 商品卡數字跟購物車同步
   if(tab==='orders'){ renderMyOrders(); checkUnsyncedOrders(); }
   if(tab==='stock') renderStock();
 }
