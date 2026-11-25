@@ -123,7 +123,8 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
     <div class="progress"><div id="progBar"></div></div>
   </div>
   <div class="stripe"></div>
-  <div class="banner hidden" id="netBanner">⚠️ 雲端連線中斷，輸入的數字可能存不進去</div>
+  <div class="banner hidden" id="netBanner">📶 沒有訊號：輸入的數字會先存在手機，有訊號會自動上傳（不要關掉這個頁面）</div>
+  <div class="banner hidden" id="pendBanner" style="background:#fff4e5;color:#9c6700;"></div>
   <div id="noSession" class="empty hidden"></div>
   <div id="countArea" class="hidden">
     <div class="bar" id="bar">
@@ -160,6 +161,8 @@ let db=null, _authReady=Promise.resolve();
 try{
   if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
   db=firebase.firestore();
+  // 離線快取：冷凍／冷藏庫裡沒訊號時，畫面資料照樣看得到
+  try{ db.enablePersistence({synchronizeTabs:true}).catch(e=>console.warn('離線快取未啟用:',e.code)); }catch(e){}
   if(typeof firebase.auth==='function'){
     _authReady=Promise.race([firebase.auth().signInAnonymously().catch(e=>console.warn('匿名登入失敗:',e)),new Promise(r=>setTimeout(r,5000))]);
   }
@@ -220,7 +223,7 @@ function startListeners(){
     ST_ID=best.id; ST=best.data();
     document.getElementById('noSession').classList.add('hidden');
     document.getElementById('countArea').classList.remove('hidden');
-    render();
+    render(); pendBanner(); if(!qs.metadata||!qs.metadata.fromCache) flushPending();
   },e=>netWarn(true,e));
 }
 function netWarn(on,e){ if(e) console.warn(e); document.getElementById('netBanner').classList.toggle('hidden',!on); }
@@ -232,8 +235,54 @@ function showNoSession(){
   document.getElementById('hdrSub').textContent=ME+'｜等待開始';
   document.getElementById('progBar').style.width='0';
 }
-function counts(){ return (ST&&ST.counts)||{}; }
-function recounts(){ return (ST&&ST.recount)||{}; }
+/* ── 離線暫存：沒訊號時先存在手機（localStorage），有訊號自動上傳 ── */
+const PKEY='cp_st_pending';
+function pendAll(){ try{ return JSON.parse(localStorage.getItem(PKEY)||'{}')||{}; }catch(e){ return {}; } }
+function pendSave(o){ try{ localStorage.setItem(PKEY,JSON.stringify(o)); }catch(e){} }
+function pendFor(id){ return pendAll()[id]||{}; }
+function pendPut(id,code,val){ const o=pendAll(); (o[id]=o[id]||{})[code]=val; pendSave(o); }
+function pendDel(id,code){ const o=pendAll(); if(o[id]){ delete o[id][code]; if(!Object.keys(o[id]).length) delete o[id]; } pendSave(o); }
+function withTimeout(p,ms){ return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error('連線逾時'),{code:'timeout'})),ms))]); }
+const isFinalErr=e=>/盤點已結束|找不到這次盤點|目前沒有進行中/.test(String(e&&e.message||''));
+let _flushing=false;
+async function flushPending(){
+  if(_flushing||!db||navigator.onLine===false) return;
+  const all=pendAll(); if(!Object.keys(all).length){ pendBanner(); return; }
+  _flushing=true; let ok=0;
+  try{
+    for(const [id,items] of Object.entries(all)){
+      for(const [code,val] of Object.entries(items)){
+        if(val._err) continue;
+        try{ await withTimeout(txWrite(code,JSON.parse(JSON.stringify(val)),id,true),10000); pendDel(id,code); ok++; }
+        catch(e){
+          if(isFinalErr(e)){ const o=pendAll(); if(o[id]&&o[id][code]){ o[id][code]._err=e.message; pendSave(o); } continue; }
+          throw e; // 還是沒訊號：下次再試
+        }
+      }
+    }
+  }catch(e){ console.warn('暫存上傳失敗，稍後再試',e); }
+  finally{ _flushing=false; }
+  if(ok) toast('☁️ 已上傳 '+ok+' 筆暫存的盤點數字');
+  pendBanner(); render();
+}
+function pendBanner(){
+  const el=document.getElementById('pendBanner'); if(!el) return;
+  const list=Object.values(pendAll()).flatMap(o=>Object.values(o));
+  const bad=list.filter(v=>v._err).length, n=list.length-bad;
+  if(!list.length){ el.classList.add('hidden'); return; }
+  el.innerHTML=(n?`⏳ 有 ${n} 筆存在手機、還沒上傳，有訊號會自動上傳 <button onclick="flushPending()" style="margin-left:6px;border:1px solid #c47f00;background:#fff;color:#9c6700;border-radius:8px;padding:2px 8px;font-weight:700;">立即上傳</button>`:'')
+    +(bad?`<div style="color:#C62828;margin-top:4px;">❌ ${bad} 筆上傳失敗（盤點已結束），請通知管理員</div>`:'');
+  el.classList.remove('hidden');
+}
+setInterval(flushPending,15000);
+window.addEventListener('online',()=>setTimeout(flushPending,1500));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) flushPending(); });
+function counts(){
+  const c=Object.assign({},(ST&&ST.counts)||{});
+  const p=pendFor(ST_ID); Object.keys(p).forEach(k=>{ c[k]=Object.assign({},p[k],{_pending:true}); });
+  return c;
+}
+function recounts(){ const r=Object.assign({},(ST&&ST.recount)||{}); Object.keys(pendFor(ST_ID)).forEach(k=>delete r[k]); return r; }
 function storageOf(p){ const L=String(p.loc||''); if(/^F/i.test(L)) return '一倉2樓'; if(/^G/i.test(L)) return '二倉'; return ['常溫','冷藏','冷凍'].includes(p.storage)?p.storage:'其他'; }
 // 盤點清單：上架＋售完的品項，加上已經有人盤過的（含清單外）
 // 不用盤的品項：儲位「客訂」、品名有「抹布」、或後台勾「盤點時不用盤」
@@ -315,9 +364,9 @@ function itemHtml(i){
       <div class="item-main">
         <div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
         <div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}${q?'｜'+esc(i.storage):''}${i.vendor?'<span class="vendor">🏭 '+esc(i.vendor)+'</span>':''}</div>
-        ${v?`<div class="item-who">${esc(v.by)} ${esc((v.at||'').slice(11,16))}${v.exp?'｜效期 '+esc(v.exp):''}${v.note?'｜📝':''}</div>`:''}
+        ${v?`<div class="item-who">${v._pending?'<b style="color:#c47f00">⏳ 未上傳</b> ':''}${esc(v.by)} ${esc((v.at||'').slice(11,16))}${v.exp?'｜效期 '+esc(v.exp):''}${v.note?'｜📝':''}</div>`:''}
       </div>
-      <div class="item-qty">${v?`<b>${esc(fmtQ(v.qty))}</b><small>${esc(i.unit)}</small>`:'<span class="todo">未盤</span>'}</div>
+      <div class="item-qty">${v?`<b${v._pending?' style="color:#c47f00"':''}>${esc(fmtQ(v.qty))}</b><small>${esc(i.unit)}</small>`:'<span class="todo">未盤</span>'}</div>
     </div>`;
   }
 }
@@ -356,9 +405,10 @@ function openItem(code){
 function bump(n){ const q=document.getElementById('fQty'); const v=Math.max(0,(Number(q.value)||0)+n); q.value=fmtQ(v); }
 function closeSheet(){ document.getElementById('mask').classList.add('hidden'); CUR=null; }
 
-async function txWrite(code,value){
-  if(!ST_ID) throw new Error('目前沒有進行中的盤點');
-  const ref=db.collection('cp_stocktake').doc(ST_ID);
+async function txWrite(code,value,id,fromQueue){
+  id=id||ST_ID;
+  if(!id) throw new Error('目前沒有進行中的盤點');
+  const ref=db.collection('cp_stocktake').doc(id);
   const fp=new firebase.firestore.FieldPath('counts',code);
   await db.runTransaction(async tx=>{
     const sn=await tx.get(ref);
@@ -367,6 +417,7 @@ async function txWrite(code,value){
     if(d.status!=='counting') throw new Error('盤點已結束，不能再修改');
     if(value===null){ tx.update(ref,fp,firebase.firestore.FieldValue.delete()); return; }
     const prev=(d.counts||{})[code];
+    if(fromQueue&&prev&&prev.by!==value.by&&Number(prev.ts||0)>Number(value.ts||0)) return; // 暫存期間別人已輸入更新的數字：不覆蓋
     const isRc=!!(d.recount||{})[code];
     if(isRc){ value.recounted=true; if(prev) value.prev={qty:prev.qty,by:prev.by,at:prev.at}; }
     else if(prev&&prev.by!==ME&&Number(prev.qty)!==Number(value.qty)) value.prev={qty:prev.qty,by:prev.by,at:prev.at};
@@ -385,8 +436,18 @@ async function saveCur(){
   const val={qty:Math.round(qty*1000)/1000,exp:document.getElementById('fExp').value||'',note:document.getElementById('fNote').value.trim(),by:ME,at:twNowStr(),ts:Date.now()};
   if(CUR.extra){ Object.assign(val,{name:CUR.name,spec:CUR.spec,unit:CUR.unit,storage:CUR.storage,extra:true,noCode:!!CUR.noCode}); }
   const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='儲存中…';
-  try{ await txWrite(CUR.code,val); toast('✓ 已存：'+CUR.name+' '+fmtQ(val.qty)+' '+CUR.unit); closeSheet(); }
-  catch(e){ console.warn(e); toast('⚠️ 沒存到：'+(e.message||e.code)+'，請再按一次',true); btn.disabled=false; btn.textContent='儲存'; }
+  const name=CUR.name, unit=CUR.unit, code=CUR.code, copy=JSON.parse(JSON.stringify(val));
+  if(navigator.onLine!==false){
+    try{ await withTimeout(txWrite(code,val),8000); pendDel(ST_ID,code); toast('✓ 已存：'+name+' '+fmtQ(val.qty)+' '+unit); closeSheet(); render(); return; }
+    catch(e){
+      console.warn(e);
+      if(isFinalErr(e)){ toast('⚠️ 沒存到：'+e.message,true); btn.disabled=false; btn.textContent='儲存'; return; }
+    }
+  }
+  // 沒訊號或連線逾時：先存在手機，有訊號自動上傳
+  pendPut(ST_ID,code,copy);
+  toast('📶 沒訊號，已先存在手機：'+name+' '+fmtQ(val.qty)+' '+unit+'，有訊號會自動上傳');
+  closeSheet(); pendBanner(); render();
 }
 async function clearCur(){
   if(!CUR||!confirm('確定清除「'+CUR.name+'」的盤點數字？')) return;
@@ -429,6 +490,10 @@ function nextExtra(){
 if(ss.get('cp_st_ok')==='1'&&ss.get('cp_st_me')) enterMain(ss.get('cp_st_me'));
 window.addEventListener('online',()=>netWarn(false));
 window.addEventListener('offline',()=>netWarn(true));
+if(navigator.onLine===false) netWarn(true);
+pendBanner();
+// 讓盤點頁可以離線打開（沒訊號時重新整理也不會變白畫面）
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 </body>
 </html>
