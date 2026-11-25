@@ -344,13 +344,16 @@ function render(){
   let list=RC_VIEW?rcItems:items.filter(i=>i.storage===TAB);
   if(q) list=items.filter(i=>(i.name+' '+i.code+' '+i.spec+' '+(i.loc||'')).toLowerCase().includes(q)); // 搜尋時跨分頁
   if(ONLY_TODO) list=list.filter(i=>!c[i.code]);
-  list.sort(locCmp);
+  // 請重盤／搜尋時跨分頁：照分頁順序（常溫→一倉2樓→二倉→冷藏→冷凍）再照儲位，方便照倉儲動線走
+  const tabIdx=i=>{ const k=STORAGES.indexOf(i.storage); return k<0?99:k; };
+  if(RC_VIEW||q) list.sort((a,b)=>tabIdx(a)-tabIdx(b)||locCmp(a,b)); else list.sort(locCmp);
+  const zkey=i=>RC_VIEW?i.storage+'｜'+zoneOf(i):zoneOf(i);
   const el=document.getElementById('list');
   if(!list.length){ el.innerHTML=`<div class="empty">${ONLY_TODO?'🎉 這一區都盤完了':'沒有符合的品項'}</div>`; return; }
-  const zc={}; list.forEach(i=>{ const z=zoneOf(i); zc[z]=zc[z]||[0,0]; zc[z][0]++; if(c[i.code]&&!rc[i.code]) zc[z][1]++; });
+  const zc={}; list.forEach(i=>{ const z=zkey(i); zc[z]=zc[z]||[0,0]; zc[z][0]++; if(c[i.code]&&!rc[i.code]) zc[z][1]++; });
   let lastZone=null;
   el.innerHTML=list.map(i=>{
-    const z=zoneOf(i), head=(!q&&!RC_VIEW&&z!==lastZone)?`<div class="zone">📍 ${esc(z)}${z==='未設儲位'?'':' 區'}<small>已盤 ${zc[z][1]} / ${zc[z][0]}</small></div>`:''; lastZone=z;
+    const z=zkey(i), head=(!q&&z!==lastZone)?`<div class="zone">📍 ${esc(z)}${/未設儲位$/.test(z)?'':' 區'}<small>${RC_VIEW?'要重盤 '+zc[z][0]+' 項':'已盤 '+zc[z][1]+' / '+zc[z][0]}</small></div>`:''; lastZone=z;
     return head+itemHtml(i);
   }).join('');
 }
