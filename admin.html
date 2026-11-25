@@ -284,7 +284,7 @@ input:checked + .slider:before{transform:translateX(20px);}
             <option value="常溫">常溫</option><option value="冷藏">冷藏</option><option value="冷凍">冷凍</option>
           </select>
         </div>
-        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" oninput="document.getElementById('pf-loclock').checked=true" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-loclock" style="accent-color:#007787;"> 🔒 鎖定儲位（匯入 Ecount 時不覆蓋）</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-forcecount" style="accent-color:#007787;"> 下架也要盤（客戶看不到，但倉庫有貨）</label></div>
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" oninput="document.getElementById('pf-loclock').checked=true" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><input type="text" id="pf-stnote" placeholder="盤點備註（只有倉管看得到，例：G2300）" style="width:100%;margin-top:6px;padding:7px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.85rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-loclock" style="accent-color:#007787;"> 🔒 鎖定儲位（匯入 Ecount 時不覆蓋）</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-forcecount" style="accent-color:#007787;"> 下架也要盤（客戶看不到，但倉庫有貨）</label></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">分類 *</label>
           <select id="pf-category" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;">
             <option value="肉品食材">🥩 肉品食材</option>
@@ -1420,6 +1420,7 @@ function openProdForm(code){
     document.getElementById('pf-storage').value=p.storage||'常溫';
     document.getElementById('pf-loc').value=p.loc||'';
     document.getElementById('pf-loclock').checked=!!p.locLock;
+    document.getElementById('pf-stnote').value=p.stNote||'';
     document.getElementById('pf-nocount').checked=!!p.noCount;
     document.getElementById('pf-forcecount').checked=!!p.forceCount;
     document.getElementById('pf-category').value=p.category||'未分類';
@@ -1434,6 +1435,7 @@ function openProdForm(code){
     document.getElementById('pf-code-hint').textContent='';
     ['pf-name','pf-unit','pf-spec','pf-step','pf-weekly','pf-price','pf-loc'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('pf-loclock').checked=false;
+    document.getElementById('pf-stnote').value='';
     document.getElementById('pf-nocount').checked=false;
     document.getElementById('pf-forcecount').checked=false;
     document.getElementById('pf-storage').value='常溫';
@@ -1461,6 +1463,7 @@ function saveProd(){
   const storage=document.getElementById('pf-storage').value;
   const loc=document.getElementById('pf-loc').value.trim().toUpperCase();
   const locLock=document.getElementById('pf-loclock').checked&&!!loc;
+  const stNote=document.getElementById('pf-stnote').value.trim();
   const noCount=document.getElementById('pf-nocount').checked;
   const forceCount=document.getElementById('pf-forcecount').checked;
   const category=document.getElementById('pf-category').value;
@@ -1480,6 +1483,7 @@ function saveProd(){
     if(weeklyVal>0) p.weeklyLimit=weeklyVal; else delete p.weeklyLimit;
     if(loc) p.loc=loc; else delete p.loc;
     if(locLock) p.locLock=true; else delete p.locLock;
+    if(stNote) p.stNote=stNote; else delete p.stNote;
     if(noCount) p.noCount=true; else delete p.noCount;
     if(forceCount) p.forceCount=true; else delete p.forceCount;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
@@ -1494,6 +1498,7 @@ function saveProd(){
     if(weeklyVal>0) newProd.weeklyLimit=weeklyVal;
     if(loc) newProd.loc=loc;
     if(locLock) newProd.locLock=true;
+    if(stNote) newProd.stNote=stNote;
     if(noCount) newProd.noCount=true;
     if(forceCount) newProd.forceCount=true;
     prods.push(newProd);

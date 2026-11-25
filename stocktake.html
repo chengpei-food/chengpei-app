@@ -66,6 +66,7 @@ body{font-family:-apple-system,'PingFang TC','Helvetica Neue',sans-serif;backgro
 .list .zone:first-child{margin-top:4px;}
 .item-name{font-weight:700;font-size:0.98rem;line-height:1.35;}
 .item-meta{font-size:0.75rem;color:var(--text2);margin-top:3px;}
+.stnote{display:inline-block;margin-left:6px;font-size:0.75rem;font-weight:800;color:#00695c;background:#e0f2f1;border-radius:6px;padding:1px 6px;}
 .vendor{display:inline-block;margin-left:6px;font-size:0.75rem;font-weight:800;color:#8e24aa;background:#f3e5f5;border-radius:6px;padding:1px 6px;}
 .item-who{font-size:0.72rem;color:var(--text3);margin-top:2px;}
 .item-qty{text-align:right;flex-shrink:0;}
@@ -294,7 +295,7 @@ function allItems(){
     if(p.status==='NO'&&!p.forceCount&&!c[p.code]) return; // forceCount：下架但仍要盤（例：BE003M 和 BE003S 輪替）
     if(skipCount(p)&&!c[p.code]) return;
     seen.add(p.code);
-    out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p),loc:p.loc||'',vendor:p.vendor||''});
+    out.push({code:p.code,name:p.name||'',spec:p.spec||'',unit:p.unit||'',storage:storageOf(p),loc:p.loc||'',vendor:p.vendor||'',stNote:p.stNote||''});
   });
   Object.entries(c).forEach(([code,v])=>{
     if(seen.has(code)) return;
@@ -358,12 +359,12 @@ function itemHtml(i){
   {
     const v=c[i.code];
     if(rc[i.code]) return `<div class="item rc" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
-      <div class="item-main"><div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}</div><div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}｜${esc(i.storage)}${i.vendor?'<span class="vendor">🏭 '+esc(i.vendor)+'</span>':''}</div></div>
+      <div class="item-main"><div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}</div><div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}｜${esc(i.storage)}${i.stNote?'<span class="stnote">'+esc(i.stNote)+'</span>':''}${i.vendor?'<span class="vendor">🏭 '+esc(i.vendor)+'</span>':''}</div></div>
       <div class="item-qty"><span class="rcbadge">🔁 請重盤</span></div></div>`;
     return `<div class="item${v?' done':''}" data-code="${esc(i.code)}" onclick="openItem(this.dataset.code)">
       <div class="item-main">
         <div class="item-name"><span class="loc${i.loc?'':' none'}">${i.loc?esc(i.loc):'—'}</span>${esc(i.name)}${i.extra?' <span style="font-size:.7rem;color:#c47f00">（清單外）</span>':''}</div>
-        <div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}${q?'｜'+esc(i.storage):''}${i.vendor?'<span class="vendor">🏭 '+esc(i.vendor)+'</span>':''}</div>
+        <div class="item-meta">${esc(i.code)}${i.spec?'｜'+esc(i.spec):''}${q?'｜'+esc(i.storage):''}${i.stNote?'<span class="stnote">'+esc(i.stNote)+'</span>':''}${i.vendor?'<span class="vendor">🏭 '+esc(i.vendor)+'</span>':''}</div>
         ${v?`<div class="item-who">${v._pending?'<b style="color:#c47f00">⏳ 未上傳</b> ':''}${esc(v.by)} ${esc((v.at||'').slice(11,16))}${v.exp?'｜效期 '+esc(v.exp):''}${v.note?'｜📝':''}</div>`:''}
       </div>
       <div class="item-qty">${v?`<b${v._pending?' style="color:#c47f00"':''}>${esc(fmtQ(v.qty))}</b><small>${esc(i.unit)}</small>`:'<span class="todo">未盤</span>'}</div>
@@ -381,7 +382,7 @@ function openItem(code){
   CUR=it; const isRc=!!recounts()[code]; const v=isRc?null:counts()[code];
   document.getElementById('sheet').innerHTML=`
     <h2>${esc(it.name)}</h2>
-    <div class="meta">${it.loc?'📍'+esc(it.loc)+'｜':''}${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}${it.vendor?'｜🏭 <b style="color:#8e24aa">'+esc(it.vendor)+'</b>':''}</div>
+    <div class="meta">${it.loc?'📍'+esc(it.loc)+'｜':''}${esc(it.code)}${it.spec?'｜'+esc(it.spec):''}｜${esc(it.storage)}${it.stNote?'｜<b style="color:#00695c">'+esc(it.stNote)+'</b>':''}${it.vendor?'｜🏭 <b style="color:#8e24aa">'+esc(it.vendor)+'</b>':''}</div>
     ${isRc?`<div class="rc-note">🔁 後台請你再盤一次這一項，請重新數過後輸入</div>`:''}
     ${v?`<div class="prev">已盤：<b>${esc(fmtQ(v.qty))} ${esc(it.unit)}</b>（${esc(v.by)} ${esc((v.at||'').slice(5,16))}）${v.prev?`<br>改過：原本 ${esc(fmtQ(v.prev.qty))}（${esc(v.prev.by)}）`:''}</div>`:''}
     <div class="field"><label>實盤數量</label>
