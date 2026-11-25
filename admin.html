@@ -284,7 +284,7 @@ input:checked + .slider:before{transform:translateX(20px);}
             <option value="常溫">常溫</option><option value="冷藏">冷藏</option><option value="冷凍">冷凍</option>
           </select>
         </div>
-        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-forcecount" style="accent-color:#007787;"> 下架也要盤（客戶看不到，但倉庫有貨）</label></div>
+        <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">儲位</label><input type="text" id="pf-loc" oninput="document.getElementById('pf-loclock').checked=true" placeholder="例：B04（盤點照這個排序）" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;"><label style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-loclock" style="accent-color:#007787;"> 🔒 鎖定儲位（匯入 Ecount 時不覆蓋）</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-nocount" style="accent-color:#007787;"> 盤點時不用盤</label><label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:0.8rem;color:#555;cursor:pointer;"><input type="checkbox" id="pf-forcecount" style="accent-color:#007787;"> 下架也要盤（客戶看不到，但倉庫有貨）</label></div>
         <div><label style="display:block;font-size:0.72rem;font-weight:700;color:#007787;margin-bottom:4px;">分類 *</label>
           <select id="pf-category" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:8px;font-size:0.9rem;color:#1A1A1A;background:white;box-sizing:border-box;">
             <option value="肉品食材">🥩 肉品食材</option>
@@ -1375,7 +1375,7 @@ function prodCard(p){
         <button onclick="deleteProd('${p.code}')" style="font-size:0.75rem;padding:4px 10px;border:1.5px solid #e53935;border-radius:8px;background:white;color:#e53935;cursor:pointer;font-weight:600;">刪除</button>
       </div>
     </div>
-    <div class="pm-spec">${p.loc?`<b style="color:var(--teal);">📍${escHtml(p.loc)}</b> · `:''}${stSkipCount(p)?'<span style="color:#999;">🚫不盤</span> · ':''}${p.status==='NO'&&p.forceCount?'<span style="color:#8e24aa;">📋下架仍盤</span> · ':''}${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
+    <div class="pm-spec">${p.loc?`<b style="color:var(--teal);">${p.locLock?'🔒':'📍'}${escHtml(p.loc)}</b> · `:''}${stSkipCount(p)?'<span style="color:#999;">🚫不盤</span> · ':''}${p.status==='NO'&&p.forceCount?'<span style="color:#8e24aa;">📋下架仍盤</span> · ':''}${p.spec||'—'} · ${p.unit}${p.weeklyLimit>0?` · <b style="color:#c47f00;">每週限 ${p.weeklyLimit}</b>`:''}</div>
     <div class="pm-foot">
       <div class="pm-price-wrap super-only">
         <span class="pm-price-label">售價</span>
@@ -1419,6 +1419,7 @@ function openProdForm(code){
     document.getElementById('pf-price').value=(p.price!=null)?p.price:'';
     document.getElementById('pf-storage').value=p.storage||'常溫';
     document.getElementById('pf-loc').value=p.loc||'';
+    document.getElementById('pf-loclock').checked=!!p.locLock;
     document.getElementById('pf-nocount').checked=!!p.noCount;
     document.getElementById('pf-forcecount').checked=!!p.forceCount;
     document.getElementById('pf-category').value=p.category||'未分類';
@@ -1432,6 +1433,7 @@ function openProdForm(code){
     document.getElementById('pf-code').style.color='#1A1A1A';
     document.getElementById('pf-code-hint').textContent='';
     ['pf-name','pf-unit','pf-spec','pf-step','pf-weekly','pf-price','pf-loc'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('pf-loclock').checked=false;
     document.getElementById('pf-nocount').checked=false;
     document.getElementById('pf-forcecount').checked=false;
     document.getElementById('pf-storage').value='常溫';
@@ -1458,6 +1460,7 @@ function saveProd(){
   const weeklyVal=parseInt(document.getElementById('pf-weekly').value)||0;
   const storage=document.getElementById('pf-storage').value;
   const loc=document.getElementById('pf-loc').value.trim().toUpperCase();
+  const locLock=document.getElementById('pf-loclock').checked&&!!loc;
   const noCount=document.getElementById('pf-nocount').checked;
   const forceCount=document.getElementById('pf-forcecount').checked;
   const category=document.getElementById('pf-category').value;
@@ -1476,6 +1479,7 @@ function saveProd(){
     p.name=name; p.unit=unit; p.spec=spec; p.price=price; p.storage=storage; p.category=category; if(stepVal>1) p.step=stepVal; else delete p.step;
     if(weeklyVal>0) p.weeklyLimit=weeklyVal; else delete p.weeklyLimit;
     if(loc) p.loc=loc; else delete p.loc;
+    if(locLock) p.locLock=true; else delete p.locLock;
     if(noCount) p.noCount=true; else delete p.noCount;
     if(forceCount) p.forceCount=true; else delete p.forceCount;
     const _selIdx=document.getElementById('pf-category').selectedIndex;
@@ -1489,6 +1493,7 @@ function saveProd(){
     if(stepVal>1) newProd.step=stepVal;
     if(weeklyVal>0) newProd.weeklyLimit=weeklyVal;
     if(loc) newProd.loc=loc;
+    if(locLock) newProd.locLock=true;
     if(noCount) newProd.noCount=true;
     if(forceCount) newProd.forceCount=true;
     prods.push(newProd);
@@ -2545,28 +2550,33 @@ function importLocations(input){
       const hi=rows.findIndex(r=>r.some(c=>String(c).trim()==='品項編碼'));
       if(hi<0) return alert('找不到「品項編碼」欄，請用 Ecount 品項清單匯出的 Excel');
       const H=rows[hi].map(c=>String(c).trim());
-      const ci=H.indexOf('品項編碼'), li=H.findIndex(c=>c.includes('儲位'));
+      const ci=H.indexOf('品項編碼'), li=H.findIndex(c=>c.includes('儲位')), vi=H.findIndex(c=>c.includes('供應商名'));
       if(li<0) return alert('找不到「儲位」欄（例如「摘要(儲位)」）');
       const map={};
-      rows.slice(hi+1).forEach(r=>{ const c=String(r[ci]||'').trim(); if(!c||c==='品項編碼') return; map[c]=String(r[li]||'').trim().toUpperCase(); });
-      const prods=getProducts(); let changed=0, same=0; const noLoc=[], notInExcel=[];
+      const vmap={}; const shortV=v=>String(v||'').trim().replace(/(股份)?有限公司$/,'').replace(/企業$/,'');
+      rows.slice(hi+1).forEach(r=>{ const c=String(r[ci]||'').trim(); if(!c||c==='品項編碼') return; map[c]=String(r[li]||'').trim().toUpperCase(); if(vi>=0) vmap[c]=shortV(r[vi]); });
+      const prods=getProducts(); let changed=0, same=0; const noLoc=[], notInExcel=[], locked=[];
+      let vChanged=0; // 供應商（盤點卡片顯示用）：不受儲位鎖定影響，Excel 有填才更新
+      prods.forEach(p=>{ if(vmap[p.code]&&p.vendor!==vmap[p.code]){ p.vendor=vmap[p.code]; vChanged++; } });
       prods.forEach(p=>{
         if(!(p.code in map)){ notInExcel.push(p.code); return; }
         const v=map[p.code];
+        if(p.locLock){ if(v&&v!==(p.loc||'')) locked.push(p.code+'（App '+(p.loc||'')+'／Ecount '+v+'）'); return; } // 手動鎖定的儲位：不覆蓋
         if(!v){ noLoc.push(p.code); return; } // Excel 儲位空白：保留 App 原本的儲位，不清掉
         if((p.loc||'')===v){ same++; return; }
         p.loc=v; changed++;
       });
       const appCodes=new Set(prods.map(p=>p.code));
       const extra=Object.keys(map).filter(c=>!appCodes.has(c));
-      const msg=`Excel 共 ${Object.keys(map).length} 個品項\n\n要更新儲位：${changed} 項\n儲位沒變：${same} 項`
+      const msg=`Excel 共 ${Object.keys(map).length} 個品項\n\n要更新儲位：${changed} 項\n要更新供應商：${vChanged} 項\n儲位沒變：${same} 項`
         +(noLoc.length?`\nExcel 裡儲位是空白（保留 App 原本的）：${noLoc.length} 項（${noLoc.slice(0,8).join('、')}${noLoc.length>8?'…':''}）`:'')
         +(notInExcel.length?`\nApp 有、Excel 沒有（不會動）：${notInExcel.length} 項（${notInExcel.slice(0,8).join('、')}${notInExcel.length>8?'…':''}）`:'')
-        +(extra.length?`\nExcel 有、App 沒有（略過）：${extra.length} 項`:'');
-      if(!changed) return alert(msg+'\n\n沒有需要更新的儲位');
+        +(extra.length?`\nExcel 有、App 沒有（略過）：${extra.length} 項`:'')
+        +(locked.length?`\n🔒 已鎖定、和 Ecount 不同（不覆蓋）：${locked.length} 項\n　${locked.slice(0,8).join('\n　')}${locked.length>8?'\n　…':''}`:'');
+      if(!changed&&!vChanged) return alert(msg+'\n\n沒有需要更新的儲位或供應商');
       if(!confirm(msg+'\n\n確定要更新嗎？')) return;
       saveProducts(prods); renderProducts();
-      alert('✓ 已更新 '+changed+' 項儲位');
+      alert('✓ 已更新 '+changed+' 項儲位、'+vChanged+' 項供應商');
     }catch(err){ alert('讀取 Excel 失敗：'+err.message); }
   };
   rd.readAsArrayBuffer(f);
