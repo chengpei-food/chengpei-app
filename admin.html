@@ -2310,7 +2310,7 @@ function stShell(doc){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">
         ${doc.status==='counting'?`<button class="export-btn" style="background:var(--teal)" onclick="stRefetch()">🔄 重新抓帳面</button>
         <button class="export-btn" style="background:var(--teal-light)" onclick="stChangeBase()">📅 改基準日</button>
-        <button class="export-btn" style="background:#8e24aa" onclick="stRecountAllDiff()">🔁 有差異的全部請重盤</button>`:''}
+        <button class="export-btn" style="background:#8e24aa" onclick="stRecountAllDiff()">🔁 選擇要請重盤的差異品項</button>`:''}
         <button class="export-btn" onclick="stExport()">📥 匯出 Key入清單 Excel</button>
         ${doc.status==='counting'?`<button class="export-btn" style="background:#C62828" onclick="stClose()">✅ 結束盤點</button>`:`<button class="export-btn" style="background:#777" onclick="stReopen()">↩️ 重新開啟</button>`}
       </div>
@@ -2391,11 +2391,21 @@ function stRows(doc){
       book:bq,qty,diff:(qty!==null&&bq!==null)?Math.round((qty-bq)*1000)/1000:null,picked:picked[code]||0,
       exp:c?c.exp||'':'',by:c?c.by||'':'',at:c?c.at||'':'',note:c?c.note||'':'',prev:c?c.prev||null:null,
       extra:!pmap[code],noCode:!!(c&&c.noCode),notInErp:!!book&&!b&&qty!==null,
-      recount:!!(doc.recount||{})[code],recounted:!!(c&&c.recounted),loc:p.loc||''};
+      recount:!!(doc.recount||{})[code],recounted:!!(c&&c.recounted),loc:p.loc||'',
+      diffOk:!!(c&&(doc.diffOk||{})[code]&&Number((doc.diffOk||{})[code].qty)===Number(c.qty))};
   }).sort((a,b)=>ST_STORAGES.concat('其他').indexOf(a.storage)-ST_STORAGES.concat('其他').indexOf(b.storage)||a.code.localeCompare(b.code));
 }
 
+// 資料更新重畫時保留捲動位置（有人輸入數字時畫面不會跳回最上面）
 function stFill(){
+  const wrap=document.querySelector('#stTable > div'), body=document.getElementById('stocktakeBody');
+  const wt=wrap?wrap.scrollTop:0, wl=wrap?wrap.scrollLeft:0, bt=body?body.scrollTop:0;
+  _stFillInner();
+  const w2=document.querySelector('#stTable > div');
+  if(w2){ w2.scrollTop=wt; w2.scrollLeft=wl; }
+  if(body) body.scrollTop=bt;
+}
+function _stFillInner(){
   const errEl=document.getElementById('stErr'); if(errEl) errEl.innerHTML=_stErr?`<div style="background:#fdecea;color:#C62828;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:0.82rem;font-weight:700;">${_stErr}</div>`:'';
   const doc=_stSel?_stDocs[_stSel]:null;
   if(!doc){
@@ -2452,7 +2462,7 @@ function stFill(){
         return `<tr style="${r.qty===null?'background:#fffdf5':''}">
           <td style="${td}"><b>${escHtml(r.name)}</b>${r.extra?' <span style="color:#c47f00;font-size:0.7rem">（App清單外）</span>':''}${r.notInErp?' <span style="color:#C62828;font-size:0.7rem">（ERP無帳）</span>':''}<br><span style="color:var(--text2);font-size:0.72rem">${r.noCode?'（無編碼）':escHtml(r.code)}${r.spec?'｜'+escHtml(r.spec):''}｜${r.storage}${r.loc?'｜📍'+escHtml(r.loc):''}</span>${r.note?`<br><span style="font-size:0.72rem;color:#7a4b00">📝 ${escHtml(r.note)}</span>`:''}</td>
           <td style="${td}text-align:right">${r.book===null?'<span style="color:#bbb">—</span>':stQ(r.book)}</td>
-          <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}${r.recount?'<br><span style="font-size:0.7rem;color:#C62828;font-weight:800">🔁 請重盤中</span>':r.recounted?'<br><span style="font-size:0.7rem;color:#2e7d32;font-weight:700">✔ 已重盤</span>':''}</td>
+          <td style="${td}text-align:right">${r.qty===null?'<span style="color:#c47f00">未盤</span>':`<b>${stQ(r.qty)}</b>`}${r.prev?`<br><span style="font-size:0.68rem;color:var(--text3)" title="被改過">原 ${stQ(r.prev.qty)}（${escHtml(r.prev.by)}）</span>`:''}${r.recount?'<br><span style="font-size:0.7rem;color:#C62828;font-weight:800">🔁 請重盤中</span>':r.recounted?'<br><span style="font-size:0.7rem;color:#2e7d32;font-weight:700">✔ 已重盤</span>':''}${!r.recount&&r.diffOk&&r.diff?'<br><span style="font-size:0.7rem;color:#2e7d32;font-weight:700">✔ 差異已確認</span>':''}</td>
           <td style="${td}text-align:right;${dc}">${r.diff===null?'':(r.diff>0?'+':'')+stQ(r.diff)}</td>
           <td style="${td}text-align:right">${r.picked?stQ(r.picked):''}</td>
           <td style="${td}white-space:nowrap;${ec}">${escHtml(r.exp)}</td>
@@ -2535,13 +2545,38 @@ async function stToggleRecount(code){
 async function stRecountAllDiff(){
   const doc=_stDocs[_stSel]; if(!doc||doc.status!=='counting') return;
   if(!(doc.book&&doc.book.state==='done')) return alert('還沒有帳面數，無法判斷差異');
-  const list=stRows(doc).filter(r=>r.diff!==null&&r.diff!==0&&!r.recount);
+  const ok=doc.diffOk||{};
+  const list=stRows(doc).filter(r=>r.diff!==null&&r.diff!==0&&!r.recount).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff));
   if(!list.length) return alert('目前沒有需要重盤的差異品項');
-  if(!confirm(`把 ${list.length} 項有差異的品項全部標成「請重盤」？\n`+list.slice(0,15).map(r=>'・'+r.name+'（差 '+(r.diff>0?'+':'')+stQ(r.diff)+'）').join('\n')+(list.length>15?'\n…':''))) return;
-  const args=[]; const v={by:getAdminRole(),at:stNowStr()};
-  list.forEach(r=>{ args.push(new firebase.firestore.FieldPath('recount',r.code),v); });
-  try{ await db.collection('cp_stocktake').doc(_stSel).update(...args); }
-  catch(e){ alert('設定失敗：'+(e.message||e.code)); }
+  // 已經確認過「不用重盤」、而且數字沒變的，預設不勾
+  const isOk=r=>ok[r.code]&&Number(ok[r.code].qty)===Number(r.qty);
+  let m=document.getElementById('stRcModal'); if(m) m.remove();
+  m=document.createElement('div'); m.id='stRcModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  m.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--admin-border);"><b style="font-size:1rem;color:var(--teal);">🔁 選擇要請重盤的品項</b>
+      <div style="font-size:0.78rem;color:var(--text2);margin-top:4px;">取消勾選＝差異已確認、不用重盤（之後數字沒變就不會再預設勾選）</div>
+      <div style="margin-top:8px;display:flex;gap:6px;"><button type="button" onclick="document.querySelectorAll('#stRcModal input[data-c]').forEach(x=>x.checked=true)" class="filter-chip" style="margin:0">全選</button><button type="button" onclick="document.querySelectorAll('#stRcModal input[data-c]').forEach(x=>x.checked=false)" class="filter-chip" style="margin:0">全不選</button></div></div>
+    <div style="overflow-y:auto;padding:6px 16px;flex:1;">${list.map(r=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #eee;cursor:pointer;">
+      <input type="checkbox" data-c="${escHtml(r.code)}" ${isOk(r)?'':'checked'} style="width:18px;height:18px;accent-color:#8e24aa;flex-shrink:0;">
+      <span style="flex:1;font-size:0.85rem;"><b>${escHtml(r.name)}</b>${isOk(r)?' <span style="color:#2e7d32;font-size:0.72rem;">（已確認）</span>':''}<br><span style="color:var(--text2);font-size:0.74rem;">${escHtml(r.code)}${r.loc?'｜📍'+escHtml(r.loc):''}｜帳面 ${stQ(r.book)} → 實盤 ${stQ(r.qty)}</span></span>
+      <b style="font-size:0.9rem;color:${r.diff>0?'#2e7d32':'#C62828'};white-space:nowrap;">${r.diff>0?'+':''}${stQ(r.diff)}</b></label>`).join('')}</div>
+    <div style="padding:12px 16px;border-top:1px solid var(--admin-border);display:flex;gap:8px;">
+      <button type="button" onclick="document.getElementById('stRcModal').remove()" style="flex:1;padding:11px;border:1.5px solid var(--admin-border);background:#fff;border-radius:10px;font-weight:700;">取消</button>
+      <button type="button" id="stRcGo" style="flex:2;padding:11px;border:none;background:#8e24aa;color:#fff;border-radius:10px;font-weight:800;">確定</button></div></div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
+  document.getElementById('stRcGo').onclick=async()=>{
+    const on=[], off=[];
+    m.querySelectorAll('input[data-c]').forEach(x=>(x.checked?on:off).push(x.dataset.c));
+    const byCode={}; list.forEach(r=>byCode[r.code]=r);
+    const args=[]; const v={by:getAdminRole(),at:stNowStr()};
+    on.forEach(c=>{ args.push(new firebase.firestore.FieldPath('recount',c),v); args.push(new firebase.firestore.FieldPath('diffOk',c),firebase.firestore.FieldValue.delete()); });
+    off.forEach(c=>{ args.push(new firebase.firestore.FieldPath('diffOk',c),{qty:byCode[c].qty,by:getAdminRole(),at:stNowStr()}); });
+    if(!args.length){ m.remove(); return; }
+    try{ await db.collection('cp_stocktake').doc(_stSel).update(...args); m.remove(); if(on.length) alert(`已請重盤 ${on.length} 項`+(off.length?`，${off.length} 項標為差異已確認`:'')); }
+    catch(e){ alert('設定失敗：'+(e.message||e.code)); }
+  };
 }
 /* ── 匯入儲位：讀 Ecount 匯出的品項 Excel（「品項編碼」＋「摘要(儲位)」欄） ── */
 function importLocations(input){
